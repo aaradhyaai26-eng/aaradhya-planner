@@ -1,0 +1,2011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="theme-color" content="#0F2044"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="description" content="Aaradhya Daily Planner – Personal productivity for MFD & Insurance Advisors"/>
+<title>Aaradhya Planner</title>
+<link rel="manifest" href="manifest.json"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+
+<!-- Firebase SDKs (v10 modular via CDN compat build) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+/* ============================================================
+   DESIGN TOKENS
+   ============================================================ */
+:root {
+  --navy:       #0F2044;
+  --navy-light: #1A3060;
+  --gold:       #C9A84C;
+  --gold-light: #F0D080;
+  --white:      #FFFFFF;
+  --grey-50:    #F5F7FA;
+  --grey-100:   #E8ECF2;
+  --grey-300:   #B0BBCC;
+  --grey-500:   #6B7A99;
+  --grey-700:   #3A4560;
+  --green:      #1DB954;
+  --red:        #E03E3E;
+  --orange:     #E8803A;
+  --blue-soft:  #3B82F6;
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  18px;
+  --shadow:     0 2px 12px rgba(15,32,68,.10);
+  --shadow-md:  0 4px 20px rgba(15,32,68,.16);
+  --transition: 0.18s ease;
+  --nav-h:      64px;
+  --fab-size:   58px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--grey-50);
+  color: var(--navy);
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding-bottom: calc(var(--nav-h) + 12px);
+}
+button { font-family: inherit; cursor: pointer; border: none; outline: none; }
+input, select, textarea { font-family: inherit; }
+
+/* ============================================================
+   SPLASH / AUTH SCREENS  (full-screen overlays)
+   ============================================================ */
+.fullscreen {
+  position: fixed; inset: 0; z-index: 9000;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: var(--navy); color: var(--white);
+  padding: 28px 24px;
+  transition: opacity .4s ease;
+}
+.fullscreen.hidden { opacity: 0; pointer-events: none; }
+.fullscreen.gone   { display: none; }
+
+/* ── Splash ── */
+#splashScreen .splash-logo {
+  width: 88px; height: 88px; background: var(--gold);
+  border-radius: 24px; display: flex; align-items: center;
+  justify-content: center; font-size: 44px; font-weight: 800;
+  color: var(--navy); margin-bottom: 22px;
+  animation: pulse 1.6s ease infinite;
+}
+@keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
+#splashScreen h1 { font-size: 26px; font-weight: 800; }
+#splashScreen p  { font-size: 13px; color: var(--grey-300); margin-top: 6px; }
+
+/* ── Auth gate (email link / setup) ── */
+#authScreen { gap: 0; justify-content: flex-start; padding-top: 60px; }
+.auth-logo {
+  width: 70px; height: 70px; background: var(--gold);
+  border-radius: 20px; display: flex; align-items: center;
+  justify-content: center; font-size: 34px; font-weight: 800;
+  color: var(--navy); margin-bottom: 20px;
+}
+.auth-title { font-size: 22px; font-weight: 800; margin-bottom: 6px; text-align:center; }
+.auth-sub   { font-size: 13px; color: var(--grey-300); text-align:center; margin-bottom: 32px; }
+.auth-card  {
+  background: rgba(255,255,255,.07); border-radius: var(--radius-lg);
+  padding: 24px; width: 100%; max-width: 380px;
+}
+.auth-label { font-size: 12px; font-weight: 700; color: var(--grey-300);
+  text-transform: uppercase; letter-spacing: .6px; margin-bottom: 8px; display:block; }
+.auth-input {
+  width: 100%; padding: 14px 16px; border-radius: var(--radius-md);
+  border: 1.5px solid rgba(255,255,255,.15); background: rgba(255,255,255,.08);
+  color: var(--white); font-size: 16px; margin-bottom: 14px;
+  transition: border-color var(--transition);
+}
+.auth-input::placeholder { color: var(--grey-500); }
+.auth-input:focus { outline: none; border-color: var(--gold); }
+.auth-btn {
+  width: 100%; padding: 15px; border-radius: var(--radius-md);
+  font-size: 16px; font-weight: 700; margin-top: 4px;
+  background: var(--gold); color: var(--navy);
+  transition: opacity var(--transition);
+}
+.auth-btn:active { opacity: .85; }
+.auth-note { font-size: 12px; color: var(--grey-500); text-align:center; margin-top: 16px; line-height:1.5; }
+.auth-link { color: var(--gold); cursor: pointer; text-decoration: underline; }
+
+/* ── PIN screen ── */
+#pinScreen { gap: 0; }
+.pin-logo {
+  width: 64px; height: 64px; background: var(--gold);
+  border-radius: 18px; display: flex; align-items: center;
+  justify-content: center; font-size: 30px; font-weight: 800;
+  color: var(--navy); margin-bottom: 18px;
+}
+.pin-title { font-size: 20px; font-weight: 800; margin-bottom: 6px; }
+.pin-sub   { font-size: 13px; color: var(--grey-300); margin-bottom: 30px; text-align:center; }
+.pin-dots  { display: flex; gap: 14px; margin-bottom: 32px; }
+.pin-dot   {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid var(--grey-500); background: transparent;
+  transition: all .15s ease;
+}
+.pin-dot.filled { background: var(--gold); border-color: var(--gold); }
+.pin-dot.error  { background: var(--red);  border-color: var(--red); animation: shake .3s ease; }
+@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+.pin-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; max-width: 300px; }
+.pin-key {
+  aspect-ratio: 1; border-radius: var(--radius-md);
+  background: rgba(255,255,255,.1); color: var(--white);
+  font-size: 22px; font-weight: 700; display: flex;
+  align-items: center; justify-content: center;
+  transition: background var(--transition), transform .1s;
+  border: none; cursor: pointer;
+}
+.pin-key:active { background: rgba(255,255,255,.25); transform: scale(.94); }
+.pin-key.del    { font-size: 18px; }
+.pin-key.empty  { background: transparent; cursor: default; }
+.pin-forgot { font-size: 12px; color: var(--grey-500); margin-top: 20px; cursor: pointer; }
+.pin-forgot span { color: var(--gold); text-decoration: underline; }
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.header {
+  background: var(--navy); color: var(--white);
+  padding: 14px 18px 12px;
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.header-left { display: flex; align-items: center; gap: 10px; }
+.header-logo {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--gold); display: flex; align-items: center;
+  justify-content: center; font-weight: 700; font-size: 18px; color: var(--navy);
+}
+.header-title { font-weight: 700; font-size: 17px; letter-spacing: -.3px; }
+.header-sub   { font-size: 11px; color: var(--grey-300); margin-top: 1px; }
+.header-right { display: flex; align-items: center; gap: 8px; }
+.hdr-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: rgba(255,255,255,.1);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; position: relative; cursor: pointer;
+}
+.notif-badge {
+  position: absolute; top: 4px; right: 4px;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--gold); border: 2px solid var(--navy);
+  display: none;
+}
+.notif-badge.show { display: block; }
+
+/* ============================================================
+   BOTTOM NAV
+   ============================================================ */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: var(--nav-h); background: var(--white);
+  box-shadow: 0 -2px 16px rgba(15,32,68,.12);
+  display: flex; align-items: center; justify-content: space-around;
+  z-index: 200; padding: 0 6px;
+}
+.nav-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  gap: 3px; padding: 8px 4px; background: none;
+  color: var(--grey-500); transition: color var(--transition);
+}
+.nav-item.active { color: var(--navy); }
+.nav-item .nav-icon  { font-size: 22px; line-height: 1; }
+.nav-item .nav-label { font-size: 10px; font-weight: 600; letter-spacing: .3px; }
+.nav-fab-wrap { flex: 0 0 72px; display: flex; justify-content: center; }
+.fab-main {
+  width: var(--fab-size); height: var(--fab-size);
+  background: var(--gold); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; color: var(--navy); font-weight: 700;
+  box-shadow: 0 4px 18px rgba(201,168,76,.5);
+  transition: transform var(--transition), box-shadow var(--transition);
+  margin-top: -22px;
+}
+.fab-main:active { transform: scale(0.93); }
+
+/* ============================================================
+   FAB MENU OVERLAY
+   ============================================================ */
+.fab-overlay {
+  position: fixed; inset: 0; background: rgba(15,32,68,.55);
+  z-index: 300; display: none; align-items: flex-end;
+  backdrop-filter: blur(3px);
+}
+.fab-overlay.open { display: flex; }
+.fab-menu {
+  width: 100%; padding: 20px 20px 100px;
+  display: flex; flex-direction: column; gap: 10px;
+  animation: slideUp .22s ease;
+}
+@keyframes slideUp { from{transform:translateY(40px);opacity:0} to{transform:translateY(0);opacity:1} }
+.fab-option {
+  background: var(--white); border-radius: var(--radius-md);
+  padding: 14px 18px; display: flex; align-items: center; gap: 14px;
+  font-size: 15px; font-weight: 600; color: var(--navy);
+  box-shadow: var(--shadow);
+}
+.fab-option .fopt-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0;
+}
+
+/* ============================================================
+   PAGE SECTIONS
+   ============================================================ */
+.page { display: none; padding: 14px 14px 0; }
+.page.active { display: block; }
+
+/* ============================================================
+   DASHBOARD
+   ============================================================ */
+.dash-greeting { margin-bottom: 16px; }
+.dash-greeting h2 { font-size: 20px; font-weight: 700; }
+.dash-greeting p  { font-size: 13px; color: var(--grey-500); margin-top: 3px; }
+.reminder-banner {
+  background: linear-gradient(135deg, var(--gold) 0%, #E8B84C 100%);
+  border-radius: var(--radius-md); padding: 12px 16px;
+  display: none; align-items: center; gap: 12px; margin-bottom: 16px; cursor: pointer;
+}
+.reminder-banner.show { display: flex; }
+.reminder-banner span { font-size: 13px; font-weight: 600; color: var(--navy); flex: 1; }
+.reminder-banner button {
+  background: var(--navy); color: var(--white);
+  border-radius: 8px; padding: 7px 12px; font-size: 12px; font-weight: 600;
+}
+.cards-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 10px; margin-bottom: 18px;
+}
+.dash-card {
+  background: var(--white); border-radius: var(--radius-md);
+  padding: 14px 16px; box-shadow: var(--shadow);
+  cursor: pointer; transition: transform var(--transition);
+  border-left: 4px solid transparent;
+}
+.dash-card:active { transform: scale(0.97); }
+.dash-card.c-navy   { border-color: var(--navy); }
+.dash-card.c-red    { border-color: var(--red); }
+.dash-card.c-gold   { border-color: var(--gold); }
+.dash-card.c-green  { border-color: var(--green); }
+.dash-card.c-blue   { border-color: var(--blue-soft); }
+.dash-card.c-orange { border-color: var(--orange); }
+.dash-card .dc-count { font-size: 30px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+.dash-card .dc-label { font-size: 11px; font-weight: 600; color: var(--grey-500); text-transform: uppercase; letter-spacing: .5px; }
+.dash-card.c-navy .dc-count   { color: var(--navy); }
+.dash-card.c-red .dc-count    { color: var(--red); }
+.dash-card.c-gold .dc-count   { color: var(--gold); }
+.dash-card.c-green .dc-count  { color: var(--green); }
+.dash-card.c-blue .dc-count   { color: var(--blue-soft); }
+.dash-card.c-orange .dc-count { color: var(--orange); }
+.section-title {
+  font-size: 13px; font-weight: 700; color: var(--grey-500);
+  text-transform: uppercase; letter-spacing: .8px; margin-bottom: 10px; margin-top: 6px;
+}
+
+/* ============================================================
+   TASK LIST
+   ============================================================ */
+.task-filters {
+  display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px;
+  margin-bottom: 12px; scrollbar-width: none;
+}
+.task-filters::-webkit-scrollbar { display: none; }
+.filter-chip {
+  flex-shrink: 0; padding: 7px 14px; border-radius: 20px;
+  font-size: 12px; font-weight: 600;
+  background: var(--white); color: var(--grey-500);
+  border: 1.5px solid var(--grey-100);
+  transition: all var(--transition); cursor: pointer;
+}
+.filter-chip.active { background: var(--navy); color: var(--white); border-color: var(--navy); }
+.task-item {
+  background: var(--white); border-radius: var(--radius-md);
+  padding: 13px 14px; margin-bottom: 8px;
+  box-shadow: var(--shadow); display: flex; gap: 12px; align-items: flex-start;
+  cursor: pointer; transition: opacity var(--transition);
+}
+.task-item.done { opacity: .5; }
+.task-check {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid var(--grey-300); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 1px; transition: all var(--transition);
+}
+.task-check.checked { background: var(--green); border-color: var(--green); color: var(--white); font-size: 12px; }
+.task-body { flex: 1; min-width: 0; }
+.task-title { font-size: 14px; font-weight: 600; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.task-meta  { font-size: 11px; color: var(--grey-500); display: flex; gap: 8px; flex-wrap: wrap; }
+.priority-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
+.p-high   { background: var(--red); }
+.p-medium { background: var(--orange); }
+.p-low    { background: var(--green); }
+.task-actions { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+.task-btn { padding: 5px 10px; border-radius: 7px; font-size: 11px; font-weight: 600; }
+.task-btn.complete { background: var(--green); color: var(--white); }
+.task-btn.snooze   { background: var(--grey-100); color: var(--grey-700); }
+.overdue-tag {
+  background: #FDECEA; color: var(--red);
+  font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 5px; display: inline-block;
+}
+
+/* ============================================================
+   MODAL / FORM SHEET
+   ============================================================ */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(15,32,68,.5);
+  z-index: 400; display: none; align-items: flex-end;
+  backdrop-filter: blur(2px);
+}
+.modal-overlay.open { display: flex; }
+.modal-sheet {
+  background: var(--white); border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  width: 100%; max-height: 92vh; overflow-y: auto;
+  padding: 0 0 30px; animation: sheetUp .24s ease;
+}
+@keyframes sheetUp { from{transform:translateY(60px);opacity:0} to{transform:translateY(0);opacity:1} }
+.modal-handle { width: 40px; height: 4px; background: var(--grey-100); border-radius: 2px; margin: 10px auto 0; }
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px 12px; border-bottom: 1px solid var(--grey-100);
+}
+.modal-title { font-size: 17px; font-weight: 700; }
+.modal-close {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--grey-100); color: var(--grey-700);
+  display: flex; align-items: center; justify-content: center; font-size: 18px;
+}
+.modal-body { padding: 18px; }
+
+/* ============================================================
+   FORMS
+   ============================================================ */
+.form-group { margin-bottom: 14px; }
+.form-label { display: block; font-size: 12px; font-weight: 700; color: var(--grey-500); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+.form-input, .form-select, .form-textarea {
+  width: 100%; padding: 12px 14px; border: 1.5px solid var(--grey-100);
+  border-radius: var(--radius-sm); font-size: 15px; color: var(--navy);
+  background: var(--grey-50); transition: border-color var(--transition);
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--navy); background: var(--white); }
+.form-textarea { min-height: 80px; resize: vertical; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn-submit {
+  width: 100%; padding: 15px; background: var(--navy); color: var(--white);
+  border-radius: var(--radius-md); font-size: 16px; font-weight: 700;
+  margin-top: 6px; transition: background var(--transition);
+}
+.btn-submit:active { background: var(--navy-light); }
+.btn-submit.gold { background: var(--gold); color: var(--navy); }
+
+/* ============================================================
+   LIST CARDS
+   ============================================================ */
+.list-card {
+  background: var(--white); border-radius: var(--radius-md);
+  padding: 14px; margin-bottom: 8px; box-shadow: var(--shadow);
+}
+.list-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 6px; }
+.list-card-name   { font-size: 15px; font-weight: 700; }
+.status-badge     { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px; }
+.s-new       { background: #EEF3FF; color: var(--blue-soft); }
+.s-follow    { background: #FFF3E0; color: var(--orange); }
+.s-contacted { background: #E8F4FD; color: #0288D1; }
+.s-converted { background: #E8F5E9; color: var(--green); }
+.s-notint    { background: #F5F5F5; color: var(--grey-500); }
+.s-pending   { background: #FFF8E1; color: #F9A825; }
+.s-submitted { background: #E8F5E9; color: var(--green); }
+.s-active    { background: #E8F5E9; color: var(--green); }
+.s-declined  { background: #FDECEA; color: var(--red); }
+.s-issued    { background: #E8F5E9; color: var(--green); }
+.list-card-meta { font-size: 12px; color: var(--grey-500); }
+.list-card-meta span { margin-right: 10px; }
+.list-card-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.action-btn {
+  padding: 7px 12px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  background: var(--grey-50); color: var(--navy); border: 1.5px solid var(--grey-100);
+}
+
+/* ============================================================
+   FOLLOW-UP CENTER
+   ============================================================ */
+.followup-tabs { display: flex; gap: 0; background: var(--grey-100); border-radius: var(--radius-sm); padding: 3px; margin-bottom: 14px; }
+.followup-tab {
+  flex: 1; padding: 9px; text-align: center; font-size: 13px; font-weight: 600;
+  color: var(--grey-500); border-radius: 7px; cursor: pointer; transition: all var(--transition);
+}
+.followup-tab.active { background: var(--white); color: var(--navy); box-shadow: var(--shadow); }
+
+/* ============================================================
+   SEARCH
+   ============================================================ */
+.search-bar {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--white); border-radius: var(--radius-md);
+  padding: 10px 14px; box-shadow: var(--shadow); margin-bottom: 14px;
+}
+.search-bar input { flex: 1; border: none; background: none; font-size: 15px; color: var(--navy); outline: none; }
+.search-bar .search-icon { font-size: 18px; color: var(--grey-500); }
+
+/* ============================================================
+   REPORTS
+   ============================================================ */
+.report-card {
+  background: var(--white); border-radius: var(--radius-md);
+  padding: 16px; margin-bottom: 10px; box-shadow: var(--shadow);
+  display: flex; align-items: center; gap: 16px;
+}
+.report-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.report-info .r-count { font-size: 26px; font-weight: 700; }
+.report-info .r-label { font-size: 12px; color: var(--grey-500); margin-top: 2px; }
+
+/* ============================================================
+   ADMIN PANEL
+   ============================================================ */
+.admin-section { margin-bottom: 20px; }
+.admin-section h3 { font-size: 14px; font-weight: 700; color: var(--grey-500); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 10px; }
+.device-card {
+  background: var(--white); border-radius: var(--radius-md);
+  padding: 14px 16px; margin-bottom: 8px; box-shadow: var(--shadow);
+  border-left: 4px solid var(--navy);
+}
+.device-card.current { border-color: var(--green); }
+.device-card.revoked { border-color: var(--red); opacity: .55; }
+.device-name { font-size: 14px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+.device-name .current-tag {
+  font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px;
+  background: #E8F5E9; color: var(--green);
+}
+.device-meta { font-size: 12px; color: var(--grey-500); line-height: 1.7; }
+.device-actions { display: flex; gap: 8px; margin-top: 10px; }
+.btn-revoke {
+  padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700;
+  background: #FDECEA; color: var(--red); border: none; cursor: pointer;
+}
+.btn-revoke-all {
+  width: 100%; padding: 14px; border-radius: var(--radius-md);
+  background: var(--red); color: var(--white); font-size: 15px; font-weight: 700;
+  border: none; cursor: pointer; margin-bottom: 10px;
+}
+.admin-warning {
+  background: #FFF8E1; border-radius: var(--radius-md); padding: 12px 16px;
+  font-size: 13px; color: #8B6914; margin-bottom: 16px; border-left: 4px solid var(--gold);
+}
+
+/* ============================================================
+   REVIEW MODAL
+   ============================================================ */
+.review-highlight {
+  background: linear-gradient(135deg, var(--navy), var(--navy-light));
+  color: var(--white); border-radius: var(--radius-md);
+  padding: 16px; margin-bottom: 16px; text-align: center;
+}
+.review-highlight h3 { font-size: 16px; font-weight: 700; }
+.review-highlight p  { font-size: 12px; color: var(--grey-300); margin-top: 4px; }
+
+/* ============================================================
+   EMPTY STATE / TOAST
+   ============================================================ */
+.empty-state { text-align: center; padding: 48px 20px; color: var(--grey-500); }
+.empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state h3 { font-size: 16px; font-weight: 700; color: var(--grey-700); margin-bottom: 6px; }
+.empty-state p  { font-size: 13px; }
+.toast {
+  position: fixed; bottom: calc(var(--nav-h) + 16px); left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--navy); color: var(--white);
+  padding: 12px 20px; border-radius: var(--radius-md);
+  font-size: 14px; font-weight: 600; z-index: 999;
+  opacity: 0; transition: all .3s ease; pointer-events: none; white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (min-width: 600px) { .cards-grid { grid-template-columns: repeat(3,1fr); } }
+@media (min-width: 900px) {
+  body { max-width: 480px; margin: 0 auto; }
+  .bottom-nav { max-width: 480px; left: 50%; transform: translateX(-50%); }
+  .fab-overlay .fab-menu { max-width: 480px; margin: 0 auto; }
+  .fullscreen { max-width: 480px; left: 50%; transform: translateX(-50%); }
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     SPLASH SCREEN
+     ============================================================ -->
+<div class="fullscreen" id="splashScreen">
+  <div class="splash-logo">A</div>
+  <h1>Aaradhya Planner</h1>
+  <p>Your daily productivity system</p>
+</div>
+
+<!-- ============================================================
+     AUTH SCREEN  (email sign-in)
+     ============================================================ -->
+<div class="fullscreen gone" id="authScreen">
+  <div class="auth-logo">A</div>
+  <div class="auth-title">Sign In</div>
+  <div class="auth-sub">Enter your registered email to receive a secure sign-in link</div>
+  <div class="auth-card">
+    <label class="auth-label">Email Address</label>
+    <input class="auth-input" id="authEmail" type="email" placeholder="you@example.com" autocomplete="email"/>
+    <button class="auth-btn" onclick="sendSignInLink()">Send Sign-In Link →</button>
+    <p class="auth-note" id="authNote">A one-time link will be sent to your email.<br/>After clicking it once, this device is remembered forever.</p>
+  </div>
+</div>
+
+<!-- ============================================================
+     PIN SCREEN
+     ============================================================ -->
+<div class="fullscreen gone" id="pinScreen">
+  <div class="pin-logo">🔒</div>
+  <div class="pin-title" id="pinTitle">Enter PIN</div>
+  <div class="pin-sub"  id="pinSub">Enter your 4-digit PIN to unlock</div>
+  <div class="pin-dots" id="pinDots">
+    <div class="pin-dot" id="pd0"></div>
+    <div class="pin-dot" id="pd1"></div>
+    <div class="pin-dot" id="pd2"></div>
+    <div class="pin-dot" id="pd3"></div>
+  </div>
+  <div class="pin-keypad">
+    <button class="pin-key" onclick="pinKey('1')">1</button>
+    <button class="pin-key" onclick="pinKey('2')">2</button>
+    <button class="pin-key" onclick="pinKey('3')">3</button>
+    <button class="pin-key" onclick="pinKey('4')">4</button>
+    <button class="pin-key" onclick="pinKey('5')">5</button>
+    <button class="pin-key" onclick="pinKey('6')">6</button>
+    <button class="pin-key" onclick="pinKey('7')">7</button>
+    <button class="pin-key" onclick="pinKey('8')">8</button>
+    <button class="pin-key" onclick="pinKey('9')">9</button>
+    <div class="pin-key empty"></div>
+    <button class="pin-key" onclick="pinKey('0')">0</button>
+    <button class="pin-key del" onclick="pinDel()">⌫</button>
+  </div>
+  <div class="pin-forgot">Forgot PIN? <span onclick="forgotPin()">Sign out and reset</span></div>
+</div>
+
+<!-- ============================================================
+     MAIN APP  (hidden until authenticated + PIN passed)
+     ============================================================ -->
+<div id="appShell" style="display:none">
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-left">
+    <div class="header-logo">A</div>
+    <div>
+      <div class="header-title">Aaradhya Planner</div>
+      <div class="header-sub" id="headerDate"></div>
+    </div>
+  </div>
+  <div class="header-right">
+    <button class="hdr-btn" onclick="requestNotifPermission()" title="Enable Notifications">
+      🔔<div class="notif-badge" id="notifBadge"></div>
+    </button>
+    <button class="hdr-btn" onclick="openAdminPanel()" title="Admin">🛡️</button>
+    <button class="hdr-btn" onclick="doSignOut()" title="Sign Out">🚪</button>
+  </div>
+</header>
+
+<!-- MAIN PAGES -->
+<main>
+
+  <!-- ===== DASHBOARD ===== -->
+  <section class="page active" id="page-dashboard">
+    <div class="dash-greeting">
+      <h2 id="greetingText">Good Morning!</h2>
+      <p id="greetingDate"></p>
+    </div>
+    <div class="reminder-banner" id="reminderBanner">
+      <span>⚡ No tasks entered today. Add your tasks now!</span>
+      <button onclick="openModal('taskModal')">Add Task</button>
+    </div>
+    <div class="section-title">Overview</div>
+    <div class="cards-grid">
+      <div class="dash-card c-navy"   onclick="goTo('tasks','today')">   <div class="dc-count" id="cnt-todayTasks">0</div><div class="dc-label">Today's Tasks</div></div>
+      <div class="dash-card c-red"    onclick="goTo('tasks','overdue')"> <div class="dc-count" id="cnt-overdue">0</div>   <div class="dc-label">Overdue Tasks</div></div>
+      <div class="dash-card c-gold"   onclick="goTo('followup','today')"><div class="dc-count" id="cnt-followups">0</div><div class="dc-label">Today's Follow-ups</div></div>
+      <div class="dash-card c-blue"   onclick="goTo('leads','pending')"> <div class="dc-count" id="cnt-leads">0</div>    <div class="dc-label">Pending Leads</div></div>
+      <div class="dash-card c-green"  onclick="goTo('sip','')">          <div class="dc-count" id="cnt-sip">0</div>      <div class="dc-label">SIP In Process</div></div>
+      <div class="dash-card c-orange" onclick="goTo('insurance','')">    <div class="dc-count" id="cnt-insurance">0</div><div class="dc-label">Insurance Cases</div></div>
+    </div>
+    <div class="dash-card c-navy" style="margin-bottom:10px" onclick="goTo('referrals','')">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="dc-count" id="cnt-referrals">0</div>
+        <div class="dc-label">Referral Requests Pending</div>
+      </div>
+    </div>
+    <div class="section-title">Today's Tasks</div>
+    <div id="dashTodayTasks"></div>
+  </section>
+
+  <!-- ===== TASKS ===== -->
+  <section class="page" id="page-tasks">
+    <div class="search-bar" style="margin-bottom:12px">
+      <span class="search-icon">🔍</span>
+      <input type="text" placeholder="Search tasks…" id="taskSearch" oninput="renderTasks()"/>
+    </div>
+    <div class="task-filters" id="taskFilters">
+      <div class="filter-chip active" onclick="setTaskFilter('all',this)">All</div>
+      <div class="filter-chip" onclick="setTaskFilter('today',this)">Today</div>
+      <div class="filter-chip" onclick="setTaskFilter('overdue',this)">Overdue</div>
+      <div class="filter-chip" onclick="setTaskFilter('pending',this)">Pending</div>
+      <div class="filter-chip" onclick="setTaskFilter('completed',this)">Completed</div>
+      <div class="filter-chip" onclick="setTaskFilter('week',this)">This Week</div>
+    </div>
+    <div id="taskList"></div>
+  </section>
+
+  <!-- ===== LEADS ===== -->
+  <section class="page" id="page-leads">
+    <div class="search-bar">
+      <span class="search-icon">🔍</span>
+      <input type="text" placeholder="Search leads…" id="leadSearch" oninput="renderLeads()"/>
+    </div>
+    <div class="task-filters">
+      <div class="filter-chip active" onclick="setLeadFilter('all',this)">All</div>
+      <div class="filter-chip" onclick="setLeadFilter('New',this)">New</div>
+      <div class="filter-chip" onclick="setLeadFilter('Follow Up',this)">Follow Up</div>
+      <div class="filter-chip" onclick="setLeadFilter('Converted',this)">Converted</div>
+    </div>
+    <div id="leadList"></div>
+  </section>
+
+  <!-- ===== FOLLOW-UP ===== -->
+  <section class="page" id="page-followup">
+    <div class="followup-tabs">
+      <div class="followup-tab active" onclick="setFollowTab('overdue',this)">Overdue</div>
+      <div class="followup-tab" onclick="setFollowTab('today',this)">Today</div>
+      <div class="followup-tab" onclick="setFollowTab('tomorrow',this)">Tomorrow</div>
+    </div>
+    <div id="followupList"></div>
+  </section>
+
+  <!-- ===== MORE ===== -->
+  <section class="page" id="page-more">
+    <div class="task-filters">
+      <div class="filter-chip active" onclick="setMoreTab('sip',this)">SIP</div>
+      <div class="filter-chip" onclick="setMoreTab('insurance',this)">Insurance</div>
+      <div class="filter-chip" onclick="setMoreTab('referrals',this)">Referrals</div>
+      <div class="filter-chip" onclick="setMoreTab('reports',this)">Reports</div>
+      <div class="filter-chip" onclick="setMoreTab('followup2',this)">Follow-up</div>
+      <div class="filter-chip" onclick="switchPage('settings',document.querySelectorAll(\'.nav-item\')[3])">⚙️ Settings</div>
+    </div>
+    <div id="sipSection"></div>
+    <div id="insuranceSection" style="display:none"></div>
+    <div id="referralsSection" style="display:none"></div>
+    <div id="reportsSection"   style="display:none"></div>
+    <div id="followup2Section" style="display:none"></div>
+  </section>
+
+</main>
+
+  <!-- ===== SEARCH PAGE ===== -->
+  <section class="page" id="page-search">
+    <div class="search-bar" style="margin-bottom:16px">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="universalSearch" placeholder="Search name, mobile, task…" oninput="runUniversalSearch()" autofocus/>
+      <button onclick="document.getElementById('universalSearch').value='';runUniversalSearch()" style="background:none;font-size:18px;color:var(--grey-500)">✕</button>
+    </div>
+    <div id="searchResults">
+      <div class="empty-state"><div class="empty-icon">🔍</div><h3>Start typing to search</h3><p>Searches tasks, leads, referrals, SIP and insurance</p></div>
+    </div>
+  </section>
+
+  <!-- ===== SETTINGS PAGE ===== -->
+  <section class="page" id="page-settings">
+    <div class="section-title">Account</div>
+    <div class="list-card" style="margin-bottom:10px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:4px">Signed in as</div>
+      <div style="font-size:15px;color:var(--navy);font-weight:600" id="settingsEmail">—</div>
+    </div>
+    <button class="btn-submit" style="background:var(--red);margin-bottom:20px" onclick="doSignOut()">🚪 Sign Out</button>
+
+    <div class="section-title">Security</div>
+    <div class="list-card" style="margin-bottom:10px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px">Change PIN</div>
+      <div style="font-size:13px;color:var(--grey-500);margin-bottom:12px">You will be asked to set a new 4-digit PIN on your next sign-in.</div>
+      <button class="action-btn" onclick="changePIN()">🔒 Reset PIN</button>
+    </div>
+    <div class="list-card" style="margin-bottom:20px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px">Admin Panel</div>
+      <div style="font-size:13px;color:var(--grey-500);margin-bottom:12px">View all logged-in devices, see login history, revoke access.</div>
+      <button class="action-btn" onclick="openAdminPanel()">🛡️ Open Admin Panel</button>
+    </div>
+
+    <div class="section-title">Notifications</div>
+    <div class="list-card" style="margin-bottom:20px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px">Daily Reminders</div>
+      <div style="font-size:13px;color:var(--grey-500);margin-bottom:12px">Reminders at 9:00 AM · 12:30 PM · 4:00 PM · 8:00 PM</div>
+      <button class="action-btn" onclick="requestNotifPermission()">🔔 Enable Notifications</button>
+    </div>
+
+    <div class="section-title">Google Sheets Sync</div>
+    <div class="list-card" style="margin-bottom:10px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px">Sync to Google Sheets</div>
+      <div style="font-size:13px;color:var(--grey-500);margin-bottom:12px">Push all your data to a Google Sheet as backup. Paste your Apps Script URL below.</div>
+      <input class="form-input" id="sheetUrl" placeholder="https://script.google.com/…" style="margin-bottom:10px" value=""/>
+      <button class="action-btn" style="background:var(--green);color:#fff;border-color:var(--green)" onclick="syncToSheets()">☁️ Sync Now</button>
+    </div>
+
+    <div class="section-title" style="margin-top:20px">Install App</div>
+    <div class="list-card" style="margin-bottom:10px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px">Add to Home Screen</div>
+      <div style="font-size:13px;color:var(--grey-500);margin-bottom:12px">Install Aaradhya Planner as an app on your Android phone or desktop Chrome.</div>
+      <button class="action-btn" id="installBtn" onclick="triggerInstall()" style="display:none;background:var(--navy);color:#fff;border-color:var(--navy)">📲 Install App</button>
+      <div id="installNote" style="font-size:13px;color:var(--grey-500)">Open this page in Chrome on Android, then tap ⋮ → "Add to Home screen".</div>
+    </div>
+
+    <div class="section-title" style="margin-top:20px">Data</div>
+    <div class="list-card" style="margin-bottom:30px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px">Export Data</div>
+      <div style="font-size:13px;color:var(--grey-500);margin-bottom:12px">Download all your data as a JSON file for backup.</div>
+      <button class="action-btn" onclick="exportData()">⬇️ Export JSON Backup</button>
+    </div>
+  </section>
+
+</main>
+
+<!-- PWA INSTALL BANNER -->
+<div id="pwaInstallBanner" style="display:none;position:fixed;bottom:calc(var(--nav-h) + 10px);left:12px;right:12px;background:var(--navy);color:#fff;border-radius:var(--radius-md);padding:14px 16px;z-index:350;box-shadow:var(--shadow-md);display:none;align-items:center;gap:12px">
+  <div style="flex:1">
+    <div style="font-size:14px;font-weight:700">Install Aaradhya Planner</div>
+    <div style="font-size:12px;color:var(--grey-300);margin-top:2px">Add to Home Screen for faster access</div>
+  </div>
+  <button onclick="triggerInstall()" style="background:var(--gold);color:var(--navy);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;flex-shrink:0">Install</button>
+  <button onclick="dismissInstallBanner()" style="background:none;color:var(--grey-300);font-size:20px;padding:4px;flex-shrink:0">✕</button>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <button class="nav-item active" onclick="switchPage('dashboard',this)"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></button>
+  <button class="nav-item"        onclick="switchPage('tasks',this)">    <span class="nav-icon">✅</span><span class="nav-label">Tasks</span></button>
+  <div class="nav-fab-wrap"><button class="fab-main" id="fabBtn" onclick="toggleFab()">＋</button></div>
+  <button class="nav-item"        onclick="switchPage('search',this)">   <span class="nav-icon">🔍</span><span class="nav-label">Search</span></button>
+  <button class="nav-item"        onclick="switchPage('more',this)">     <span class="nav-icon">⋯</span><span class="nav-label">More</span></button>
+</nav>
+
+</div><!-- /appShell -->
+
+<!-- ============================================================
+     FAB MENU OVERLAY
+     ============================================================ -->
+<div class="fab-overlay" id="fabOverlay" onclick="closeFabOnBg(event)">
+  <div class="fab-menu">
+    <button class="fab-option" onclick="openFromFab('taskModal')">      <div class="fopt-icon" style="background:#EEF3FF">✅</div><span>New Task</span></button>
+    <button class="fab-option" onclick="openFromFab('leadModal')">      <div class="fopt-icon" style="background:#FFF8E1">👤</div><span>New Lead</span></button>
+    <button class="fab-option" onclick="openFromFab('referralModal')">  <div class="fopt-icon" style="background:#F3E5F5">🤝</div><span>New Referral</span></button>
+    <button class="fab-option" onclick="openFromFab('sipModal')">       <div class="fopt-icon" style="background:#E8F5E9">📈</div><span>New SIP Case</span></button>
+    <button class="fab-option" onclick="openFromFab('insuranceModal')"> <div class="fopt-icon" style="background:#FBE9E7">🛡️</div><span>New Insurance Case</span></button>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODALS
+     ============================================================ -->
+
+<!-- Task Modal -->
+<div class="modal-overlay" id="taskModal">
+  <div class="modal-sheet"><div class="modal-handle"></div>
+    <div class="modal-header"><span class="modal-title">New Task</span><button class="modal-close" onclick="closeModal('taskModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Task Title *</label><input class="form-input" id="t-title" placeholder="Enter task title"/></div>
+      <div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" id="t-desc" placeholder="Optional details…"></textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Priority</label>
+          <select class="form-select" id="t-priority"><option>High</option><option selected>Medium</option><option>Low</option></select></div>
+        <div class="form-group"><label class="form-label">Category</label>
+          <select class="form-select" id="t-category"><option>Follow Up</option><option>SIP</option><option>Insurance</option><option>Service Request</option><option>Personal</option><option>Other</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Due Date</label><input class="form-input" id="t-date" type="date"/></div>
+        <div class="form-group"><label class="form-label">Due Time</label><input class="form-input" id="t-time" type="time"/></div>
+      </div>
+      <button class="btn-submit" onclick="saveTask()">Save Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lead Modal -->
+<div class="modal-overlay" id="leadModal">
+  <div class="modal-sheet"><div class="modal-handle"></div>
+    <div class="modal-header"><span class="modal-title">New Lead</span><button class="modal-close" onclick="closeModal('leadModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="l-name" placeholder="Full name"/></div>
+        <div class="form-group"><label class="form-label">Mobile *</label><input class="form-input" id="l-mobile" type="tel" placeholder="10-digit"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">City</label><input class="form-input" id="l-city" placeholder="City"/></div>
+        <div class="form-group"><label class="form-label">Source</label>
+          <select class="form-select" id="l-source"><option>Referral</option><option>Existing Client</option><option>Walk In</option><option>WhatsApp</option><option>Call</option><option>Social Media</option><option>Other</option></select></div>
+      </div>
+      <div class="form-group"><label class="form-label">Interested In</label>
+        <select class="form-select" id="l-interest"><option>Mutual Fund</option><option>SIP</option><option>Health Insurance</option><option>Life Insurance</option><option>General Insurance</option></select></div>
+      <div class="form-group"><label class="form-label">Lead Status</label>
+        <select class="form-select" id="l-status"><option>New</option><option>Contacted</option><option>Follow Up</option><option>Converted</option><option>Not Interested</option></select></div>
+      <button class="btn-submit gold" onclick="saveLead()">Save Lead + Create Follow-up</button>
+    </div>
+  </div>
+</div>
+
+<!-- Referral Modal -->
+<div class="modal-overlay" id="referralModal">
+  <div class="modal-sheet"><div class="modal-handle"></div>
+    <div class="modal-header"><span class="modal-title">New Referral</span><button class="modal-close" onclick="closeModal('referralModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Referrer Name *</label><input class="form-input" id="r-refName" placeholder="Who referred"/></div>
+      <div class="form-group"><label class="form-label">Referrer Mobile</label><input class="form-input" id="r-refMobile" type="tel"/></div>
+      <div class="form-group"><label class="form-label">Referred Person Name *</label><input class="form-input" id="r-name" placeholder="Person being referred"/></div>
+      <div class="form-group"><label class="form-label">Referred Person Mobile</label><input class="form-input" id="r-mobile" type="tel"/></div>
+      <div class="form-group"><label class="form-label">Product Interested In</label>
+        <select class="form-select" id="r-product"><option>Mutual Fund</option><option>SIP</option><option>Health Insurance</option><option>Life Insurance</option><option>General Insurance</option></select></div>
+      <button class="btn-submit" onclick="saveReferral()">Save Referral + Create Follow-up</button>
+    </div>
+  </div>
+</div>
+
+<!-- SIP Modal -->
+<div class="modal-overlay" id="sipModal">
+  <div class="modal-sheet"><div class="modal-handle"></div>
+    <div class="modal-header"><span class="modal-title">New SIP Case</span><button class="modal-close" onclick="closeModal('sipModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Client Name *</label><input class="form-input" id="s-name" placeholder="Client name"/></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">SIP Amount (₹)</label><input class="form-input" id="s-amount" type="number" placeholder="5000"/></div>
+        <div class="form-group"><label class="form-label">Fund Category</label>
+          <select class="form-select" id="s-fund"><option>Large Cap</option><option>Flexi Cap</option><option>Mid Cap</option><option>Small Cap</option><option>Hybrid</option><option>Other</option></select></div>
+      </div>
+      <div class="form-group"><label class="form-label">Status</label>
+        <select class="form-select" id="s-status"><option>Documentation Pending</option><option>Payment Pending</option><option>Submitted</option><option>Active</option></select></div>
+      <button class="btn-submit" style="background:var(--green)" onclick="saveSIP()">Save SIP Case</button>
+    </div>
+  </div>
+</div>
+
+<!-- Insurance Modal -->
+<div class="modal-overlay" id="insuranceModal">
+  <div class="modal-sheet"><div class="modal-handle"></div>
+    <div class="modal-header"><span class="modal-title">New Insurance Case</span><button class="modal-close" onclick="closeModal('insuranceModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Client Name *</label><input class="form-input" id="i-name" placeholder="Client name"/></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Product Type</label>
+          <select class="form-select" id="i-type"><option>Health</option><option>Life</option><option>Motor</option><option>General</option></select></div>
+        <div class="form-group"><label class="form-label">Premium (₹)</label><input class="form-input" id="i-premium" type="number" placeholder="12000"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Status</label>
+        <select class="form-select" id="i-status"><option>Proposal Pending</option><option>Medical Pending</option><option>Issued</option><option>Declined</option></select></div>
+      <button class="btn-submit" style="background:var(--orange)" onclick="saveInsurance()">Save Insurance Case</button>
+    </div>
+  </div>
+</div>
+
+<!-- Daily Review Modal -->
+<div class="modal-overlay" id="reviewModal">
+  <div class="modal-sheet"><div class="modal-handle"></div>
+    <div class="modal-header"><span class="modal-title">End of Day Review</span><button class="modal-close" onclick="closeModal('reviewModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="review-highlight"><h3>📊 Today's Summary</h3><p id="reviewDateLabel"></p></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Tasks Completed</label><input class="form-input" id="rv-completed" type="number" placeholder="0"/></div>
+        <div class="form-group"><label class="form-label">Tasks Pending</label><input class="form-input" id="rv-pending" type="number" placeholder="0"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Important Follow-up Tomorrow</label>
+        <textarea class="form-textarea" id="rv-tomorrow" placeholder="Key follow-up actions for tomorrow…"></textarea></div>
+      <button class="btn-submit" onclick="saveReview()">Save Daily Review</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reminder Popup -->
+<div class="modal-overlay" id="reminderPopup">
+  <div class="modal-sheet"><div class="modal-handle"></div>
+    <div class="modal-body" style="text-align:center;padding:30px 20px">
+      <div style="font-size:48px;margin-bottom:12px">⏰</div>
+      <h2 style="font-size:18px;font-weight:800;margin-bottom:8px">Productivity Check!</h2>
+      <p style="font-size:14px;color:var(--grey-500);margin-bottom:24px">Have you entered today's tasks?</p>
+      <button class="btn-submit" onclick="openFromFab('taskModal')" style="margin-bottom:10px">Add Task Now</button>
+      <button style="width:100%;padding:13px;border-radius:var(--radius-md);font-size:15px;font-weight:600;background:var(--grey-100);color:var(--grey-700)" onclick="closeModal('reminderPopup')">Remind Me Later</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Panel Modal -->
+<div class="modal-overlay" id="adminModal">
+  <div class="modal-sheet"><div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">🛡️ Admin Panel</span>
+      <button class="modal-close" onclick="closeModal('adminModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="admin-warning">⚠️ You are the admin. Revoking a device will force it to sign in again. Revoke All logs out all devices simultaneously.</div>
+      <div class="admin-section">
+        <h3>Signed-In Devices</h3>
+        <div id="adminDeviceList"><div style="text-align:center;padding:20px;color:var(--grey-500)">Loading…</div></div>
+      </div>
+      <button class="btn-revoke-all" onclick="revokeAllDevices()">🚫 Revoke All — Log Out Everywhere</button>
+      <div class="admin-section" style="margin-top:4px">
+        <h3>Login History (Last 10)</h3>
+        <div id="adminLoginHistory"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- ============================================================
+     JAVASCRIPT
+     ============================================================ -->
+<script>
+/* ============================================================
+   FIREBASE CONFIG
+   Replace these values with YOUR Firebase project config
+   (Step 3 of the setup guide below)
+   ============================================================ */
+const FIREBASE_CONFIG = {
+  apiKey:            "REPLACE_WITH_YOUR_API_KEY",
+  authDomain:        "REPLACE_WITH_YOUR_AUTH_DOMAIN",
+  projectId:         "REPLACE_WITH_YOUR_PROJECT_ID",
+  storageBucket:     "REPLACE_WITH_YOUR_STORAGE_BUCKET",
+  messagingSenderId: "REPLACE_WITH_YOUR_MESSAGING_SENDER_ID",
+  appId:             "REPLACE_WITH_YOUR_APP_ID"
+};
+
+/* ADMIN EMAIL — only this email can access Admin Panel */
+const ADMIN_EMAIL = "REPLACE_WITH_YOUR_EMAIL@gmail.com";
+
+/* ============================================================
+   INIT FIREBASE
+   ============================================================ */
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+
+/* ============================================================
+   LOCAL DATA STORE  (localStorage, per-device)
+   ============================================================ */
+const DB = {
+  get:  k => JSON.parse(localStorage.getItem(k) || '[]'),
+  set:  (k,v) => localStorage.setItem(k, JSON.stringify(v)),
+  push: (k,v) => { const a = DB.get(k); a.push(v); DB.set(k,a); }
+};
+
+const uid       = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const todayStr  = () => new Date().toISOString().slice(0,10);
+const tomorrowStr = () => { const d = new Date(); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); };
+const fmtDate   = s => s ? new Date(s+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : '';
+const deviceId  = () => {
+  let id = localStorage.getItem('_deviceId');
+  if (!id) { id = uid(); localStorage.setItem('_deviceId', id); }
+  return id;
+};
+
+/* ============================================================
+   AUTH STATE MACHINE
+   States: splash → auth → pin-setup → pin → app
+   ============================================================ */
+let currentUser = null;
+let pinBuffer   = '';
+let pinMode     = 'enter'; // 'setup' | 'confirm' | 'enter'
+let pinTemp     = '';      // for confirm step
+
+window.addEventListener('load', () => {
+  // Check for email sign-in link
+  if (auth.isSignInWithEmailLink(window.location.href)) {
+    handleEmailLink();
+    return;
+  }
+
+  // Show splash then check auth
+  setTimeout(() => {
+    auth.onAuthStateChanged(async user => {
+      hideSplash();
+      if (!user) {
+        showScreen('authScreen');
+        return;
+      }
+      currentUser = user;
+      // Check if this device session is revoked
+      const revoked = await isDeviceRevoked();
+      if (revoked) { await auth.signOut(); showScreen('authScreen'); return; }
+      // Check PIN
+      const hasPin = localStorage.getItem('_pin');
+      if (!hasPin) {
+        startPinSetup();
+      } else {
+        showScreen('pinScreen');
+        setPinUI('enter');
+      }
+    });
+  }, 1500);
+});
+
+function hideSplash() {
+  const s = document.getElementById('splashScreen');
+  s.classList.add('hidden');
+  setTimeout(() => s.classList.add('gone'), 500);
+}
+function showScreen(id) {
+  ['authScreen','pinScreen'].forEach(s => {
+    const el = document.getElementById(s);
+    el.classList.add(s===id ? '' : 'gone');
+    el.classList.remove(s===id ? 'gone' : '');
+  });
+  document.getElementById('appShell').style.display = 'none';
+}
+function showApp() {
+  ['authScreen','pinScreen'].forEach(s => document.getElementById(s).classList.add('gone'));
+  document.getElementById('appShell').style.display = 'block';
+  initApp();
+}
+
+/* ============================================================
+   EMAIL SIGN-IN  (passwordless magic link)
+   ============================================================ */
+async function sendSignInLink() {
+  const email = document.getElementById('authEmail').value.trim();
+  if (!email || !email.includes('@')) { showToast('Please enter a valid email'); return; }
+
+  // Check whitelist (only allowed emails)
+  const allowed = [ADMIN_EMAIL]; // add family emails here if needed
+  if (!allowed.includes(email.toLowerCase())) {
+    showToast('❌ This email is not authorised');
+    return;
+  }
+
+  const actionCodeSettings = {
+    url: window.location.href,
+    handleCodeInApp: true
+  };
+  try {
+    await auth.sendSignInLinkToEmail(email, actionCodeSettings);
+    localStorage.setItem('_pendingEmail', email);
+    document.getElementById('authNote').innerHTML =
+      '✅ Link sent! Check your email inbox.<br/>Click the link in the email — this device will be remembered forever.';
+    showToast('📧 Sign-in link sent to ' + email);
+  } catch(e) {
+    showToast('Error: ' + e.message);
+  }
+}
+
+async function handleEmailLink() {
+  let email = localStorage.getItem('_pendingEmail');
+  if (!email) email = window.prompt('Please enter your email to confirm sign-in:');
+  if (!email) return;
+  try {
+    const result = await auth.signInWithEmailLink(email, window.location.href);
+    localStorage.removeItem('_pendingEmail');
+    window.history.replaceState({}, document.title, window.location.pathname);
+    currentUser = result.user;
+    // Register this device in Firestore
+    await registerDevice();
+    hideSplash();
+    const hasPin = localStorage.getItem('_pin');
+    if (!hasPin) startPinSetup();
+    else { showScreen('pinScreen'); setPinUI('enter'); }
+  } catch(e) {
+    hideSplash();
+    showScreen('authScreen');
+    showToast('Sign-in failed: ' + e.message);
+  }
+}
+
+/* ============================================================
+   DEVICE REGISTRY  (Firestore)
+   ============================================================ */
+async function registerDevice() {
+  if (!currentUser) return;
+  const dId = deviceId();
+  const info = getDeviceInfo();
+  await db.collection('devices').doc(dId).set({
+    userId:    currentUser.uid,
+    email:     currentUser.email,
+    deviceId:  dId,
+    browser:   info.browser,
+    os:        info.os,
+    loginAt:   firebase.firestore.FieldValue.serverTimestamp(),
+    lastSeen:  firebase.firestore.FieldValue.serverTimestamp(),
+    revoked:   false
+  }, { merge: true });
+
+  // Log login event
+  await db.collection('loginHistory').add({
+    userId:   currentUser.uid,
+    email:    currentUser.email,
+    deviceId: dId,
+    browser:  info.browser,
+    os:       info.os,
+    loginAt:  firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function updateLastSeen() {
+  if (!currentUser) return;
+  const dId = deviceId();
+  try {
+    await db.collection('devices').doc(dId).update({
+      lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch(e) {}
+}
+
+async function isDeviceRevoked() {
+  try {
+    const doc = await db.collection('devices').doc(deviceId()).get();
+    if (!doc.exists) return false;
+    return doc.data().revoked === true;
+  } catch(e) { return false; }
+}
+
+function getDeviceInfo() {
+  const ua = navigator.userAgent;
+  let browser = 'Unknown Browser';
+  if (ua.includes('Chrome'))  browser = 'Chrome';
+  if (ua.includes('Firefox')) browser = 'Firefox';
+  if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari';
+  if (ua.includes('Edge'))    browser = 'Edge';
+  let os = 'Unknown OS';
+  if (ua.includes('Android')) os = 'Android';
+  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+  else if (ua.includes('Windows')) os = 'Windows';
+  else if (ua.includes('Mac'))     os = 'Mac';
+  else if (ua.includes('Linux'))   os = 'Linux';
+  return { browser, os };
+}
+
+/* ============================================================
+   ADMIN PANEL
+   ============================================================ */
+async function openAdminPanel() {
+  if (!currentUser || currentUser.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+    showToast('🚫 Admin access only'); return;
+  }
+  openModal('adminModal');
+  await loadAdminData();
+}
+
+async function loadAdminData() {
+  const listEl    = document.getElementById('adminDeviceList');
+  const historyEl = document.getElementById('adminLoginHistory');
+  listEl.innerHTML    = '<div style="text-align:center;padding:20px;color:var(--grey-500)">Loading…</div>';
+  historyEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--grey-500)">Loading…</div>';
+
+  try {
+    // Devices
+    const devSnap = await db.collection('devices').where('userId','==',currentUser.uid).get();
+    const devices = [];
+    devSnap.forEach(d => devices.push({ id: d.id, ...d.data() }));
+
+    if (!devices.length) {
+      listEl.innerHTML = '<div style="padding:12px;color:var(--grey-500)">No devices found.</div>';
+    } else {
+      const myId = deviceId();
+      listEl.innerHTML = devices.map(dev => {
+        const isCurrent = dev.deviceId === myId;
+        const lastSeen  = dev.lastSeen?.toDate ? dev.lastSeen.toDate().toLocaleString('en-IN') : 'Unknown';
+        const loginAt   = dev.loginAt?.toDate  ? dev.loginAt.toDate().toLocaleString('en-IN')  : 'Unknown';
+        return `<div class="device-card ${isCurrent?'current':''} ${dev.revoked?'revoked':''}">
+          <div class="device-name">
+            ${dev.os==='Android'?'📱':dev.os==='iOS'?'📱':'💻'} ${dev.os} — ${dev.browser}
+            ${isCurrent?'<span class="current-tag">This Device</span>':''}
+            ${dev.revoked?'<span style="font-size:10px;background:#FDECEA;color:var(--red);padding:2px 7px;border-radius:10px">Revoked</span>':''}
+          </div>
+          <div class="device-meta">
+            First login: ${loginAt}<br/>
+            Last active: ${lastSeen}
+          </div>
+          ${!dev.revoked && !isCurrent ? `<div class="device-actions"><button class="btn-revoke" onclick="revokeDevice('${dev.deviceId}')">Revoke Access</button></div>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    // Login history
+    const histSnap = await db.collection('loginHistory')
+      .where('userId','==',currentUser.uid)
+      .orderBy('loginAt','desc').limit(10).get();
+    const logs = [];
+    histSnap.forEach(d => logs.push(d.data()));
+    if (!logs.length) {
+      historyEl.innerHTML = '<div style="padding:12px;color:var(--grey-500)">No login history.</div>';
+    } else {
+      historyEl.innerHTML = logs.map(l => {
+        const t = l.loginAt?.toDate ? l.loginAt.toDate().toLocaleString('en-IN') : '–';
+        return `<div class="list-card" style="margin-bottom:6px">
+          <div style="font-size:13px;font-weight:600">${l.os} — ${l.browser}</div>
+          <div style="font-size:12px;color:var(--grey-500)">${t}</div>
+        </div>`;
+      }).join('');
+    }
+  } catch(e) {
+    listEl.innerHTML = `<div style="padding:12px;color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+async function revokeDevice(dId) {
+  if (!confirm('Revoke this device? It will be forced to sign in again.')) return;
+  await db.collection('devices').doc(dId).update({ revoked: true });
+  showToast('✅ Device revoked');
+  await loadAdminData();
+}
+
+async function revokeAllDevices() {
+  if (!confirm('This will log out ALL devices including others. Are you sure?')) return;
+  const snap = await db.collection('devices').where('userId','==',currentUser.uid).get();
+  const batch = db.batch();
+  snap.forEach(d => batch.update(d.ref, { revoked: true }));
+  await batch.commit();
+  showToast('🚫 All devices revoked');
+  await loadAdminData();
+}
+
+/* ============================================================
+   PIN SYSTEM
+   ============================================================ */
+function startPinSetup() {
+  showScreen('pinScreen');
+  pinMode = 'setup';
+  setPinUI('setup');
+}
+
+function setPinUI(mode) {
+  pinBuffer = '';
+  updatePinDots();
+  if (mode === 'setup') {
+    document.getElementById('pinTitle').textContent = 'Set Your PIN';
+    document.getElementById('pinSub').textContent   = 'Choose a 4-digit PIN to protect your planner';
+  } else if (mode === 'confirm') {
+    document.getElementById('pinTitle').textContent = 'Confirm PIN';
+    document.getElementById('pinSub').textContent   = 'Enter the same PIN again to confirm';
+  } else {
+    document.getElementById('pinTitle').textContent = 'Enter PIN';
+    document.getElementById('pinSub').textContent   = 'Enter your 4-digit PIN to unlock';
+  }
+}
+
+function pinKey(k) {
+  if (pinBuffer.length >= 4) return;
+  pinBuffer += k;
+  updatePinDots();
+  if (pinBuffer.length === 4) {
+    setTimeout(() => processPIN(), 120);
+  }
+}
+
+function pinDel() {
+  pinBuffer = pinBuffer.slice(0,-1);
+  updatePinDots();
+}
+
+function updatePinDots() {
+  for (let i=0; i<4; i++) {
+    const dot = document.getElementById('pd'+i);
+    dot.classList.toggle('filled', i < pinBuffer.length);
+    dot.classList.remove('error');
+  }
+}
+
+function pinError() {
+  for (let i=0; i<4; i++) document.getElementById('pd'+i).classList.add('error');
+  setTimeout(() => { pinBuffer=''; updatePinDots(); }, 600);
+}
+
+async function processPIN() {
+  if (pinMode === 'setup') {
+    pinTemp = pinBuffer;
+    pinMode = 'confirm';
+    setPinUI('confirm');
+  } else if (pinMode === 'confirm') {
+    if (pinBuffer !== pinTemp) {
+      pinError();
+      showToast('PINs do not match. Try again.');
+      pinMode = 'setup';
+      setTimeout(() => setPinUI('setup'), 700);
+    } else {
+      // Hash the PIN before storing
+      const hashed = await hashPIN(pinBuffer);
+      localStorage.setItem('_pin', hashed);
+      // Register device if not already
+      await registerDevice();
+      showToast('✅ PIN set! You\'re all set.');
+      showApp();
+    }
+  } else {
+    // Verify
+    const stored = localStorage.getItem('_pin');
+    const hashed = await hashPIN(pinBuffer);
+    if (hashed === stored) {
+      await updateLastSeen();
+      showApp();
+    } else {
+      pinError();
+      showToast('Wrong PIN. Try again.');
+    }
+  }
+}
+
+async function hashPIN(pin) {
+  const msgBuffer = new TextEncoder().encode(pin + 'aaradhya_salt_2025');
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  return Array.from(new Uint8Array(hashBuffer)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function forgotPin() {
+  if (!confirm('This will sign you out. You\'ll need to sign in again with your email. Continue?')) return;
+  localStorage.removeItem('_pin');
+  doSignOut();
+}
+
+async function doSignOut() {
+  await auth.signOut();
+  localStorage.removeItem('_pin');
+  showScreen('authScreen');
+  document.getElementById('appShell').style.display = 'none';
+}
+
+/* ============================================================
+   APP INIT
+   ============================================================ */
+function initApp() {
+  setGreeting();
+  updateDashboard();
+  renderTasks();
+  renderLeads();
+  renderFollowup();
+  renderSIP();
+  renderInsurance();
+  renderReferrals();
+  renderReports();
+  scheduleReminders();
+  checkTodayTasks();
+  document.getElementById('t-date').value = todayStr();
+  // Ping last-seen every 5 min
+  setInterval(updateLastSeen, 5*60*1000);
+}
+
+function setGreeting() {
+  const h = new Date().getHours();
+  const greet = h<12?'Good Morning':h<17?'Good Afternoon':'Good Evening';
+  document.getElementById('greetingText').textContent = greet + '! 👋';
+  const now = new Date();
+  document.getElementById('greetingDate').textContent = now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('headerDate').textContent   = now.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+}
+
+/* ============================================================
+   NAVIGATION
+   ============================================================ */
+function switchPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  if (name==='tasks')   renderTasks();
+  if (name==='leads')   renderLeads();
+  if (name==='followup') renderFollowup();
+  if (name==='more')    { renderSIP(); renderInsurance(); renderReferrals(); renderReports(); }
+}
+
+function goTo(page, filter) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  if (page==='tasks')     { renderTasks(); }
+  if (page==='followup')  { setFollowTab(filter||'today', null); }
+  if (page==='leads')     { renderLeads(); }
+  if (['sip','insurance','referrals'].includes(page)) setMoreTabDirect(page);
+}
+
+function setMoreTabDirect(tab) {
+  ['sip','insurance','referrals','reports'].forEach(t =>
+    document.getElementById(t+'Section').style.display = t===tab?'block':'none');
+  document.querySelectorAll('#page-more .filter-chip').forEach(c =>
+    c.classList.toggle('active', c.textContent.toLowerCase()===tab));
+}
+
+/* ============================================================
+   FAB
+   ============================================================ */
+function toggleFab() {
+  const el = document.getElementById('fabOverlay');
+  el.classList.toggle('open');
+  document.getElementById('fabBtn').textContent = el.classList.contains('open') ? '✕' : '＋';
+}
+function closeFabOnBg(e) { if (e.target===document.getElementById('fabOverlay')) closeFab(); }
+function closeFab() { document.getElementById('fabOverlay').classList.remove('open'); document.getElementById('fabBtn').textContent='＋'; }
+
+/* ============================================================
+   MODALS
+   ============================================================ */
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function openFromFab(id){ closeFab(); closeModal('reminderPopup'); openModal(id); }
+
+/* ============================================================
+   TOAST
+   ============================================================ */
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+/* ============================================================
+   DASHBOARD
+   ============================================================ */
+function updateDashboard() {
+  const tasks     = DB.get('tasks');
+  const leads     = DB.get('leads');
+  const referrals = DB.get('referrals');
+  const sips      = DB.get('sips');
+  const insurance = DB.get('insurance');
+  const today     = todayStr();
+
+  const todayTasks = tasks.filter(t => t.dueDate===today && t.status!=='Completed');
+  const overdue    = tasks.filter(t => t.dueDate && t.dueDate<today && t.status!=='Completed');
+  const followups  = tasks.filter(t => t.dueDate===today && t.category==='Follow Up' && t.status!=='Completed');
+  const pendLeads  = leads.filter(l => ['New','Contacted','Follow Up'].includes(l.status));
+  const activeSIP  = sips.filter(s => s.status!=='Active');
+  const activeIns  = insurance.filter(i => !['Issued','Declined'].includes(i.status));
+  const pendRefs   = referrals.filter(r => ['Pending','Contacted'].includes(r.status));
+
+  document.getElementById('cnt-todayTasks').textContent = todayTasks.length;
+  document.getElementById('cnt-overdue').textContent    = overdue.length;
+  document.getElementById('cnt-followups').textContent  = followups.length;
+  document.getElementById('cnt-leads').textContent      = pendLeads.length;
+  document.getElementById('cnt-sip').textContent        = activeSIP.length;
+  document.getElementById('cnt-insurance').textContent  = activeIns.length;
+  document.getElementById('cnt-referrals').textContent  = pendRefs.length;
+
+  const c = document.getElementById('dashTodayTasks');
+  c.innerHTML = todayTasks.length
+    ? todayTasks.slice(0,5).map(t => taskCard(t,true)).join('')
+    : '<div class="empty-state"><div class="empty-icon">📋</div><h3>No tasks for today</h3><p>Tap + to add your first task</p></div>';
+}
+
+/* ============================================================
+   TASKS
+   ============================================================ */
+let taskFilter = 'all';
+function setTaskFilter(f,el) {
+  taskFilter=f;
+  if (el) { document.querySelectorAll('#taskFilters .filter-chip').forEach(c=>c.classList.remove('active')); el.classList.add('active'); }
+  renderTasks();
+}
+
+function saveTask() {
+  const title = document.getElementById('t-title').value.trim();
+  if (!title) { showToast('Please enter a task title'); return; }
+  DB.push('tasks', { id:uid(), title,
+    desc:     document.getElementById('t-desc').value.trim(),
+    priority: document.getElementById('t-priority').value,
+    category: document.getElementById('t-category').value,
+    dueDate:  document.getElementById('t-date').value,
+    dueTime:  document.getElementById('t-time').value,
+    status:   'Pending', created: new Date().toISOString()
+  });
+  closeModal('taskModal');
+  document.getElementById('t-title').value = '';
+  document.getElementById('t-desc').value  = '';
+  showToast('✅ Task saved!');
+  updateDashboard(); renderTasks(); checkTodayTasks();
+}
+
+function taskCard(t, mini=false) {
+  const isOverdue = t.dueDate && t.dueDate < todayStr() && t.status!=='Completed';
+  return `<div class="task-item ${t.status==='Completed'?'done':''}">
+    <div class="task-check ${t.status==='Completed'?'checked':''}" onclick="toggleTask('${t.id}')">${t.status==='Completed'?'✓':''}</div>
+    <div class="task-body">
+      <div class="task-title"><span class="priority-dot p-${t.priority.toLowerCase()}"></span>${t.title}</div>
+      <div class="task-meta">
+        <span>${t.category}</span>
+        ${t.dueDate?`<span>${fmtDate(t.dueDate)}${t.dueTime?' '+t.dueTime:''}</span>`:''}
+        ${isOverdue?'<span class="overdue-tag">OVERDUE</span>':''}
+      </div>
+    </div>
+    ${!mini?`<div class="task-actions">
+      ${t.status!=='Completed'?`<button class="task-btn complete" onclick="completeTask('${t.id}')">Done</button>`:''}
+      ${t.status!=='Completed'?`<button class="task-btn snooze"   onclick="snoozeTask('${t.id}')">+1d</button>`:''}
+    </div>`:''}
+  </div>`;
+}
+
+function renderTasks() {
+  const tasks = DB.get('tasks');
+  const q = (document.getElementById('taskSearch')?.value||'').toLowerCase();
+  const today = todayStr();
+  const wEnd  = new Date(); wEnd.setDate(wEnd.getDate()+7);
+  const wStr  = wEnd.toISOString().slice(0,10);
+  let list = tasks.filter(t => {
+    if (q && !t.title.toLowerCase().includes(q)) return false;
+    if (taskFilter==='today')     return t.dueDate===today;
+    if (taskFilter==='overdue')   return t.dueDate<today && t.status!=='Completed';
+    if (taskFilter==='pending')   return t.status==='Pending';
+    if (taskFilter==='completed') return t.status==='Completed';
+    if (taskFilter==='week')      return t.dueDate>=today && t.dueDate<=wStr;
+    return true;
+  });
+  list.sort((a,b)=>{ const p={High:0,Medium:1,Low:2}; if(a.status!==b.status) return a.status==='Completed'?1:-1; return (p[a.priority]||1)-(p[b.priority]||1); });
+  const el = document.getElementById('taskList');
+  el.innerHTML = list.length ? list.map(t=>taskCard(t)).join('') : '<div class="empty-state"><div class="empty-icon">✅</div><h3>No tasks found</h3><p>All clear!</p></div>';
+}
+
+function toggleTask(id) {
+  const tasks = DB.get('tasks'); const t = tasks.find(t=>t.id===id);
+  if (t) { t.status = t.status==='Completed'?'Pending':'Completed'; DB.set('tasks',tasks); }
+  renderTasks(); updateDashboard();
+}
+function completeTask(id) { toggleTask(id); showToast('🎉 Task completed!'); }
+function snoozeTask(id) {
+  const tasks = DB.get('tasks'); const t = tasks.find(t=>t.id===id);
+  if (t && t.dueDate) { const d=new Date(t.dueDate+'T12:00:00'); d.setDate(d.getDate()+1); t.dueDate=d.toISOString().slice(0,10); DB.set('tasks',tasks); showToast('⏰ Snoozed to tomorrow'); renderTasks(); updateDashboard(); }
+}
+
+/* ============================================================
+   LEADS
+   ============================================================ */
+let leadFilter = 'all';
+function setLeadFilter(f,el) {
+  leadFilter=f;
+  if(el){el.closest('.task-filters').querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');}
+  renderLeads();
+}
+function saveLead() {
+  const name = document.getElementById('l-name').value.trim();
+  if (!name) { showToast('Please enter a name'); return; }
+  const lead = { id:uid(), name, mobile:document.getElementById('l-mobile').value.trim(), city:document.getElementById('l-city').value.trim(), source:document.getElementById('l-source').value, interest:document.getElementById('l-interest').value, status:document.getElementById('l-status').value, created:new Date().toISOString() };
+  DB.push('leads',lead);
+  DB.push('tasks',{ id:uid(), title:`Follow up: ${name}`, desc:`Lead – ${lead.interest} (${lead.source})`, priority:'High', category:'Follow Up', dueDate:tomorrowStr(), dueTime:'10:00', status:'Pending', created:new Date().toISOString() });
+  closeModal('leadModal');
+  ['l-name','l-mobile','l-city'].forEach(id=>document.getElementById(id).value='');
+  showToast('👤 Lead saved + follow-up created!');
+  renderLeads(); updateDashboard();
+}
+function renderLeads() {
+  const leads = DB.get('leads');
+  const q = (document.getElementById('leadSearch')?.value||'').toLowerCase();
+  let list = leads.filter(l=>{ if(q&&!l.name.toLowerCase().includes(q)&&!(l.mobile||'').includes(q))return false; if(leadFilter!=='all'&&l.status!==leadFilter)return false; return true; }).reverse();
+  const el = document.getElementById('leadList');
+  if (!list.length) { el.innerHTML='<div class="empty-state"><div class="empty-icon">👤</div><h3>No leads yet</h3><p>Tap + to add your first lead</p></div>'; return; }
+  el.innerHTML = list.map(l=>`<div class="list-card">
+    <div class="list-card-header"><div class="list-card-name">${l.name}</div><span class="status-badge ${statusClass(l.status)}">${l.status}</span></div>
+    <div class="list-card-meta"><span>📱 ${l.mobile||'–'}</span><span>📍 ${l.city||'–'}</span><span>🎯 ${l.interest}</span></div>
+    <div class="list-card-meta" style="margin-top:4px"><span>Source: ${l.source}</span></div>
+    <div class="list-card-actions">${['New','Contacted','Follow Up','Converted','Not Interested'].map(s=>`<button class="action-btn" onclick="updateLeadStatus('${l.id}','${s}')" style="${l.status===s?'background:var(--navy);color:#fff;border-color:var(--navy)':''}">${s}</button>`).join('')}</div>
+  </div>`).join('');
+}
+function updateLeadStatus(id,status){const leads=DB.get('leads');const l=leads.find(l=>l.id===id);if(l){l.status=status;DB.set('leads',leads);renderLeads();updateDashboard();}}
+
+/* ============================================================
+   REFERRALS
+   ============================================================ */
+function saveReferral(){
+  const refName=document.getElementById('r-refName').value.trim(),name=document.getElementById('r-name').value.trim();
+  if(!refName||!name){showToast('Please fill required fields');return;}
+  const ref={id:uid(),refName,name,refMobile:document.getElementById('r-refMobile').value.trim(),mobile:document.getElementById('r-mobile').value.trim(),product:document.getElementById('r-product').value,status:'Pending',created:new Date().toISOString()};
+  DB.push('referrals',ref);
+  DB.push('tasks',{id:uid(),title:`Call referral: ${name}`,desc:`Referred by ${refName} – ${ref.product}`,priority:'High',category:'Follow Up',dueDate:tomorrowStr(),dueTime:'10:00',status:'Pending',created:new Date().toISOString()});
+  closeModal('referralModal');
+  ['r-refName','r-refMobile','r-name','r-mobile'].forEach(id=>document.getElementById(id).value='');
+  showToast('🤝 Referral saved + follow-up created!');
+  renderReferrals(); updateDashboard();
+}
+function renderReferrals(){
+  const refs=DB.get('referrals').reverse();
+  const el=document.getElementById('referralsSection');
+  if(!refs.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">🤝</div><h3>No referrals yet</h3></div>';return;}
+  el.innerHTML=refs.map(r=>`<div class="list-card">
+    <div class="list-card-header"><div class="list-card-name">${r.name}</div><span class="status-badge ${statusClass(r.status)}">${r.status}</span></div>
+    <div class="list-card-meta"><span>Referred by: <strong>${r.refName}</strong></span><span>📱 ${r.mobile||'–'}</span></div>
+    <div class="list-card-meta" style="margin-top:4px"><span>🎯 ${r.product}</span></div>
+    <div class="list-card-actions">${['Pending','Contacted','Converted'].map(s=>`<button class="action-btn" onclick="updateRefStatus('${r.id}','${s}')" style="${r.status===s?'background:var(--navy);color:#fff;border-color:var(--navy)':''}">${s}</button>`).join('')}</div>
+  </div>`).join('');
+}
+function updateRefStatus(id,status){const refs=DB.get('referrals');const r=refs.find(r=>r.id===id);if(r){r.status=status;DB.set('referrals',refs);renderReferrals();updateDashboard();}}
+
+/* ============================================================
+   SIP
+   ============================================================ */
+function saveSIP(){
+  const name=document.getElementById('s-name').value.trim();
+  if(!name){showToast('Please enter client name');return;}
+  DB.push('sips',{id:uid(),name,amount:document.getElementById('s-amount').value,fund:document.getElementById('s-fund').value,status:document.getElementById('s-status').value,created:new Date().toISOString()});
+  closeModal('sipModal'); document.getElementById('s-name').value=''; document.getElementById('s-amount').value='';
+  showToast('📈 SIP case saved!'); renderSIP(); updateDashboard();
+}
+function renderSIP(){
+  const sips=DB.get('sips').reverse();
+  const el=document.getElementById('sipSection');
+  if(!sips.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📈</div><h3>No SIP cases yet</h3></div>';return;}
+  el.innerHTML=sips.map(s=>`<div class="list-card">
+    <div class="list-card-header"><div class="list-card-name">${s.name}</div><span class="status-badge ${statusClass(s.status)}">${s.status}</span></div>
+    <div class="list-card-meta">${s.amount?`<span>₹${Number(s.amount).toLocaleString('en-IN')}/mo</span>`:''}<span>${s.fund}</span></div>
+    <div class="list-card-actions">${['Documentation Pending','Payment Pending','Submitted','Active'].map(st=>`<button class="action-btn" onclick="updateSIPStatus('${s.id}','${st}')" style="${s.status===st?'background:var(--green);color:#fff;border-color:var(--green)':''}">${st}</button>`).join('')}</div>
+  </div>`).join('');
+}
+function updateSIPStatus(id,status){const sips=DB.get('sips');const s=sips.find(s=>s.id===id);if(s){s.status=status;DB.set('sips',sips);renderSIP();updateDashboard();}}
+
+/* ============================================================
+   INSURANCE
+   ============================================================ */
+function saveInsurance(){
+  const name=document.getElementById('i-name').value.trim();
+  if(!name){showToast('Please enter client name');return;}
+  DB.push('insurance',{id:uid(),name,type:document.getElementById('i-type').value,premium:document.getElementById('i-premium').value,status:document.getElementById('i-status').value,created:new Date().toISOString()});
+  closeModal('insuranceModal'); document.getElementById('i-name').value=''; document.getElementById('i-premium').value='';
+  showToast('🛡️ Insurance case saved!'); renderInsurance(); updateDashboard();
+}
+function renderInsurance(){
+  const ins=DB.get('insurance').reverse();
+  const el=document.getElementById('insuranceSection');
+  if(!ins.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">🛡️</div><h3>No insurance cases yet</h3></div>';return;}
+  el.innerHTML=ins.map(i=>`<div class="list-card">
+    <div class="list-card-header"><div class="list-card-name">${i.name}</div><span class="status-badge ${statusClass(i.status)}">${i.status}</span></div>
+    <div class="list-card-meta"><span>${i.type} Insurance</span>${i.premium?`<span>₹${Number(i.premium).toLocaleString('en-IN')} premium</span>`:''}</div>
+    <div class="list-card-actions">${['Proposal Pending','Medical Pending','Issued','Declined'].map(st=>`<button class="action-btn" onclick="updateInsStatus('${i.id}','${st}')" style="${i.status===st?'background:var(--orange);color:#fff;border-color:var(--orange)':''}">${st}</button>`).join('')}</div>
+  </div>`).join('');
+}
+function updateInsStatus(id,status){const ins=DB.get('insurance');const i=ins.find(i=>i.id===id);if(i){i.status=status;DB.set('insurance',ins);renderInsurance();updateDashboard();}}
+
+/* ============================================================
+   FOLLOW-UP CENTER
+   ============================================================ */
+let followTab='overdue';
+function setFollowTab(tab,el){
+  followTab=tab;
+  if(el){document.querySelectorAll('.followup-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');}
+  else{document.querySelectorAll('.followup-tab').forEach(t=>t.classList.toggle('active',t.textContent.toLowerCase()===tab));}
+  renderFollowup();
+}
+function renderFollowup(){
+  const tasks=DB.get('tasks'),today=todayStr(),tomorrow=tomorrowStr();
+  let list;
+  if(followTab==='today')    list=tasks.filter(t=>t.dueDate===today&&t.status!=='Completed');
+  else if(followTab==='tomorrow') list=tasks.filter(t=>t.dueDate===tomorrow&&t.status!=='Completed');
+  else list=tasks.filter(t=>t.dueDate&&t.dueDate<today&&t.status!=='Completed');
+  const el=document.getElementById('followupList');
+  if(!list.length){el.innerHTML=`<div class="empty-state"><div class="empty-icon">📞</div><h3>All clear!</h3><p>No ${followTab} follow-ups</p></div>`;return;}
+  el.innerHTML=list.map(t=>`<div class="list-card">
+    <div class="list-card-header"><div class="list-card-name">${t.title}</div><span class="status-badge ${t.dueDate<today?'s-notint':'s-new'}">${t.dueDate<today?'Overdue':'Due'}</span></div>
+    <div class="list-card-meta"><span>${t.category}</span><span>${fmtDate(t.dueDate)}</span></div>
+    <div class="list-card-actions">
+      <button class="action-btn" style="background:var(--green);color:#fff;border-color:var(--green)" onclick="completeTask('${t.id}');renderFollowup()">✅ Call Done</button>
+      <button class="action-btn" onclick="snoozeTask('${t.id}');renderFollowup()">📅 +1 Day</button>
+      <button class="action-btn" onclick="completeTask('${t.id}');renderFollowup()">✔ Completed</button>
+    </div>
+  </div>`).join('');
+}
+
+/* ============================================================
+   REPORTS
+   ============================================================ */
+function renderReports(){
+  const mStart=new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().slice(0,10);
+  const thisMonth=arr=>arr.filter(i=>(i.created||'').slice(0,10)>=mStart);
+  const data=[
+    {icon:'✅',bg:'#EEF3FF',label:'Tasks Completed This Month',count:thisMonth(DB.get('tasks')).filter(t=>t.status==='Completed').length},
+    {icon:'👤',bg:'#FFF8E1',label:'New Leads This Month',count:thisMonth(DB.get('leads')).length},
+    {icon:'🤝',bg:'#F3E5F5',label:'Referrals This Month',count:thisMonth(DB.get('referrals')).length},
+    {icon:'📈',bg:'#E8F5E9',label:'SIP Cases This Month',count:thisMonth(DB.get('sips')).length},
+    {icon:'🛡️',bg:'#FBE9E7',label:'Insurance Cases This Month',count:thisMonth(DB.get('insurance')).length},
+  ];
+  document.getElementById('reportsSection').innerHTML=data.map(d=>`<div class="report-card"><div class="report-icon" style="background:${d.bg}">${d.icon}</div><div class="report-info"><div class="r-count">${d.count}</div><div class="r-label">${d.label}</div></div></div>`).join('');
+}
+
+function setMoreTab(tab,el){
+  ['sip','insurance','referrals','reports'].forEach(t=>document.getElementById(t+'Section').style.display=t===tab?'block':'none');
+  document.querySelectorAll('#page-more .filter-chip').forEach(c=>c.classList.remove('active'));
+  if(el)el.classList.add('active');
+  if(tab==='reports')renderReports();
+}
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function statusClass(s){
+  return({'New':'s-new','Contacted':'s-contacted','Follow Up':'s-follow','Converted':'s-converted','Not Interested':'s-notint','Pending':'s-pending','Submitted':'s-submitted','Active':'s-active','Declined':'s-declined','Issued':'s-issued','Documentation Pending':'s-pending','Payment Pending':'s-pending','Proposal Pending':'s-pending','Medical Pending':'s-follow'})[s]||'s-new';
+}
+
+/* ============================================================
+   REMINDERS & DAILY CHECK
+   ============================================================ */
+function checkTodayTasks(){
+  const hasToday=DB.get('tasks').some(t=>t.created&&t.created.slice(0,10)===todayStr());
+  document.getElementById('reminderBanner').classList.toggle('show',!hasToday);
+  document.getElementById('notifBadge').classList.toggle('show',!hasToday);
+}
+
+function scheduleReminders(){
+  const times=[{h:9,m:0},{h:12,m:30},{h:16,m:0},{h:20,m:0}];
+  setInterval(()=>{
+    const n=new Date(),today=n.toISOString().slice(0,10);
+    times.forEach(t=>{
+      const key=`${today}-${t.h}-${t.m}`;
+      if(localStorage.getItem('reminded-'+key))return;
+      if(n.getHours()===t.h&&n.getMinutes()===t.m){
+        localStorage.setItem('reminded-'+key,'1');
+        const hasToday=DB.get('tasks').some(tk=>tk.created&&tk.created.slice(0,10)===today);
+        if(!hasToday)openModal('reminderPopup');
+        if(t.h===20)showReviewPrompt();
+        if(Notification.permission==='granted'){
+          new Notification(t.h===20?'📊 Daily Review Time!':'⏰ Productivity Reminder',{
+            body:t.h===20?'Time to review your day and plan tomorrow.':'Have you entered today\'s tasks?',
+            icon:'icon-192.png'
+          });
+        }
+      }
+    });
+  },55000);
+}
+
+function showReviewPrompt(){
+  document.getElementById('reviewDateLabel').textContent=new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
+  const today=todayStr(),tasks=DB.get('tasks');
+  document.getElementById('rv-completed').value=tasks.filter(t=>t.status==='Completed'&&t.dueDate===today).length;
+  document.getElementById('rv-pending').value=tasks.filter(t=>t.status==='Pending'&&t.dueDate===today).length;
+  openModal('reviewModal');
+}
+
+function saveReview(){
+  const review={date:todayStr(),completed:document.getElementById('rv-completed').value,pending:document.getElementById('rv-pending').value,tomorrow:document.getElementById('rv-tomorrow').value,saved:new Date().toISOString()};
+  const reviews=DB.get('reviews');
+  const idx=reviews.findIndex(r=>r.date===review.date);
+  if(idx>=0)reviews[idx]=review;else reviews.push(review);
+  DB.set('reviews',reviews);
+  closeModal('reviewModal'); showToast('📊 Daily review saved!');
+}
+
+async function requestNotifPermission(){
+  if(!('Notification' in window)){showToast('Notifications not supported');return;}
+  const p=await Notification.requestPermission();
+  if(p==='granted'){showToast('🔔 Notifications enabled!');document.getElementById('notifBadge').classList.remove('show');}
+  else showToast('Notifications blocked in browser settings');
+}
+
+/* ============================================================
+   UPDATED setMoreTab — includes followup2
+   ============================================================ */
+function setMoreTab(tab,el){
+  ['sip','insurance','referrals','reports','followup2'].forEach(t=>{
+    const s=document.getElementById(t+'Section');
+    if(s) s.style.display=t===tab?'block':'none';
+  });
+  document.querySelectorAll('#page-more .filter-chip').forEach(c=>c.classList.remove('active'));
+  if(el) el.classList.add('active');
+  if(tab==='reports')   renderReports();
+  if(tab==='followup2') renderFollowupInMore();
+}
+
+function renderFollowupInMore(){
+  const el=document.getElementById('followup2Section');
+  if(!el) return;
+  el.innerHTML=`
+    <div class="followup-tabs" style="margin-bottom:14px">
+      <div class="followup-tab active" id="fmTab-overdue"  onclick="setFollowTabMore('overdue',this)">Overdue</div>
+      <div class="followup-tab"        id="fmTab-today"    onclick="setFollowTabMore('today',this)">Today</div>
+      <div class="followup-tab"        id="fmTab-tomorrow" onclick="setFollowTabMore('tomorrow',this)">Tomorrow</div>
+    </div>
+    <div id="followupMoreList"></div>`;
+  renderFollowupMore('overdue');
+}
+
+function setFollowTabMore(tab,el){
+  document.querySelectorAll('#followup2Section .followup-tab').forEach(t=>t.classList.remove('active'));
+  if(el) el.classList.add('active');
+  renderFollowupMore(tab);
+}
+
+function renderFollowupMore(tab){
+  const tasks=DB.get('tasks'),today=todayStr(),tomorrow=tomorrowStr();
+  let list;
+  if(tab==='today')    list=tasks.filter(t=>t.dueDate===today&&t.status!=='Completed');
+  else if(tab==='tomorrow') list=tasks.filter(t=>t.dueDate===tomorrow&&t.status!=='Completed');
+  else list=tasks.filter(t=>t.dueDate&&t.dueDate<today&&t.status!=='Completed');
+  const el=document.getElementById('followupMoreList');
+  if(!el) return;
+  if(!list.length){el.innerHTML=`<div class="empty-state"><div class="empty-icon">📞</div><h3>All clear!</h3><p>No ${tab} follow-ups</p></div>`;return;}
+  el.innerHTML=list.map(t=>`<div class="list-card">
+    <div class="list-card-header"><div class="list-card-name">${t.title}</div><span class="status-badge ${t.dueDate<today?'s-notint':'s-new'}">${t.dueDate<today?'Overdue':'Due'}</span></div>
+    <div class="list-card-meta"><span>${t.category}</span><span>${fmtDate(t.dueDate)}</span></div>
+    <div class="list-card-actions">
+      <button class="action-btn" style="background:var(--green);color:#fff;border-color:var(--green)" onclick="completeTask('${t.id}');renderFollowupMore('${tab}')">✅ Done</button>
+      <button class="action-btn" onclick="snoozeTask('${t.id}');renderFollowupMore('${tab}')">📅 +1 Day</button>
+    </div>
+  </div>`).join('');
+}
+
+/* ============================================================
+   UNIVERSAL SEARCH
+   ============================================================ */
+function runUniversalSearch(){
+  const q=(document.getElementById('universalSearch').value||'').toLowerCase().trim();
+  const el=document.getElementById('searchResults');
+  if(!q){
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">🔍</div><h3>Start typing to search</h3><p>Searches tasks, leads, referrals, SIP and insurance</p></div>';
+    return;
+  }
+  const results=[];
+
+  DB.get('tasks').forEach(t=>{
+    if(t.title.toLowerCase().includes(q)||( t.desc&&t.desc.toLowerCase().includes(q)))
+      results.push({type:'Task',icon:'✅',bg:'#EEF3FF',title:t.title,sub:`${t.category} · ${t.priority} · ${fmtDate(t.dueDate)||'No date'}`,badge:t.status,badgeClass:t.status==='Completed'?'s-converted':'s-new'});
+  });
+  DB.get('leads').forEach(l=>{
+    if(l.name.toLowerCase().includes(q)||(l.mobile&&l.mobile.includes(q))||(l.city&&l.city.toLowerCase().includes(q)))
+      results.push({type:'Lead',icon:'👤',bg:'#FFF8E1',title:l.name,sub:`📱 ${l.mobile||'–'} · ${l.interest} · ${l.city||'–'}`,badge:l.status,badgeClass:statusClass(l.status)});
+  });
+  DB.get('referrals').forEach(r=>{
+    if(r.name.toLowerCase().includes(q)||(r.mobile&&r.mobile.includes(q))||r.refName.toLowerCase().includes(q))
+      results.push({type:'Referral',icon:'🤝',bg:'#F3E5F5',title:r.name,sub:`Referred by ${r.refName} · ${r.product}`,badge:r.status,badgeClass:statusClass(r.status)});
+  });
+  DB.get('sips').forEach(s=>{
+    if(s.name.toLowerCase().includes(q))
+      results.push({type:'SIP',icon:'📈',bg:'#E8F5E9',title:s.name,sub:`₹${s.amount?Number(s.amount).toLocaleString('en-IN'):'–'}/mo · ${s.fund}`,badge:s.status,badgeClass:statusClass(s.status)});
+  });
+  DB.get('insurance').forEach(i=>{
+    if(i.name.toLowerCase().includes(q))
+      results.push({type:'Insurance',icon:'🛡️',bg:'#FBE9E7',title:i.name,sub:`${i.type} · ₹${i.premium?Number(i.premium).toLocaleString('en-IN'):'–'}`,badge:i.status,badgeClass:statusClass(i.status)});
+  });
+
+  if(!results.length){
+    el.innerHTML=`<div class="empty-state"><div class="empty-icon">😕</div><h3>No results for "${q}"</h3><p>Try a different name or number</p></div>`;
+    return;
+  }
+  el.innerHTML=`<div style="font-size:12px;color:var(--grey-500);margin-bottom:10px">${results.length} result${results.length>1?'s':''} found</div>`+
+    results.map(r=>`<div class="list-card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <div style="width:36px;height:36px;border-radius:10px;background:${r.bg};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${r.icon}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.title}</div>
+          <div style="font-size:12px;color:var(--grey-500)">${r.sub}</div>
+        </div>
+        <span class="status-badge ${r.badgeClass}" style="flex-shrink:0">${r.badge}</span>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--grey-500);text-transform:uppercase;letter-spacing:.5px">${r.type}</div>
+    </div>`).join('');
+}
+
+/* ============================================================
+   SETTINGS PAGE
+   ============================================================ */
+function openSettingsPage(){
+  switchPage('settings', null);
+  if(currentUser) document.getElementById('settingsEmail').textContent = currentUser.email||'—';
+  // Restore saved sheet URL
+  const saved=localStorage.getItem('_sheetUrl');
+  if(saved) document.getElementById('sheetUrl').value=saved;
+}
+
+function changePIN(){
+  if(!confirm('This will clear your current PIN and ask you to set a new one on next unlock. Continue?')) return;
+  localStorage.removeItem('_pin');
+  showToast('PIN cleared. Please sign out and sign in again to set new PIN.');
+}
+
+/* ============================================================
+   GOOGLE SHEETS SYNC
+   ============================================================ */
+async function syncToSheets(){
+  const url=(document.getElementById('sheetUrl').value||'').trim();
+  if(!url){showToast('Please paste your Apps Script URL first');return;}
+  localStorage.setItem('_sheetUrl',url);
+  showToast('☁️ Syncing…');
+  const payload={
+    Tasks:      DB.get('tasks'),
+    Leads:      DB.get('leads'),
+    Referrals:  DB.get('referrals'),
+    SIP:        DB.get('sips'),
+    Insurance:  DB.get('insurance'),
+    DailyReview:DB.get('reviews')
+  };
+  try{
+    const r=await fetch(url,{method:'POST',body:JSON.stringify({action:'syncAll',payload})});
+    if(r.ok) showToast('✅ Synced to Google Sheets!');
+    else     showToast('Sync failed. Check your Apps Script URL.');
+  }catch(e){ showToast('Sync error: '+e.message); }
+}
+
+/* ============================================================
+   EXPORT DATA (JSON backup)
+   ============================================================ */
+function exportData(){
+  const data={
+    exportedAt: new Date().toISOString(),
+    tasks:      DB.get('tasks'),
+    leads:      DB.get('leads'),
+    referrals:  DB.get('referrals'),
+    sips:       DB.get('sips'),
+    insurance:  DB.get('insurance'),
+    reviews:    DB.get('reviews')
+  };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`aaradhya-backup-${todayStr()}.json`;
+  a.click();
+  showToast('⬇️ Backup downloaded!');
+}
+
+/* ============================================================
+   PWA INSTALL PROMPT
+   ============================================================ */
+let deferredInstallPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();
+  deferredInstallPrompt=e;
+  // Show install banner after 10 seconds if not dismissed
+  const dismissed=localStorage.getItem('_installDismissed');
+  if(!dismissed){
+    setTimeout(()=>{
+      const banner=document.getElementById('pwaInstallBanner');
+      if(banner){ banner.style.display='flex'; }
+      const btn=document.getElementById('installBtn');
+      const note=document.getElementById('installNote');
+      if(btn){ btn.style.display='inline-block'; }
+      if(note){ note.style.display='none'; }
+    },10000);
+  }
+});
+
+function triggerInstall(){
+  if(!deferredInstallPrompt){showToast('To install: tap ⋮ menu → "Add to Home screen"');return;}
+  deferredInstallPrompt.prompt();
+  deferredInstallPrompt.userChoice.then(c=>{
+    if(c.outcome==='accepted') showToast('✅ App installed!');
+    deferredInstallPrompt=null;
+    dismissInstallBanner();
+  });
+}
+
+function dismissInstallBanner(){
+  localStorage.setItem('_installDismissed','1');
+  const b=document.getElementById('pwaInstallBanner');
+  if(b) b.style.display='none';
+}
+
+window.addEventListener('appinstalled',()=>{
+  showToast('✅ Aaradhya Planner installed!');
+  dismissInstallBanner();
+});
+
+/* ============================================================
+   OVERRIDE switchPage to handle search + settings
+   ============================================================ */
+const _origSwitchPage = switchPage;
+function switchPage(name,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  const pg=document.getElementById('page-'+name);
+  if(pg) pg.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  if(name==='tasks')    renderTasks();
+  if(name==='leads')    renderLeads();
+  if(name==='followup') renderFollowup();
+  if(name==='more')     {renderSIP();renderInsurance();renderReferrals();renderReports();}
+  if(name==='search')   {setTimeout(()=>document.getElementById('universalSearch')?.focus(),100);}
+  if(name==='settings') openSettingsPage();
+}
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>
