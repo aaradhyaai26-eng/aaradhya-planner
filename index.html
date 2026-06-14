@@ -1047,8 +1047,12 @@ function hideSplash() {
 function showScreen(id) {
   ['authScreen','pinScreen'].forEach(s => {
     const el = document.getElementById(s);
-    el.classList.add(s===id ? '' : 'gone');
-    el.classList.remove(s===id ? 'gone' : '');
+    if (!el) return;
+    if (s === id) {
+      el.classList.remove('gone');
+    } else {
+      el.classList.add('gone');
+    }
   });
   document.getElementById('appShell').style.display = 'none';
 }
