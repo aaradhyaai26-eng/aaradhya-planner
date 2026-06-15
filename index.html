@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
 <meta name="theme-color" content="#0F2044"/>
+<meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="description" content="Aaradhya Daily Planner – Personal productivity for MFD & Insurance Advisors"/>
@@ -962,16 +963,18 @@ input, select, textarea { font-family: inherit; }
    (Step 3 of the setup guide below)
    ============================================================ */
 const FIREBASE_CONFIG = {
-  apiKey:            "AIzaSyC7vqIu9_i9McRi7PwduOidNkfdVNAVPA8",
-  authDomain:        "aaradhya-planner.firebaseapp.com",
-  projectId:         "aaradhya-planner",
-  storageBucket:     "aaradhya-planner.firebasestorage.app",
+  apiKey: "AIzaSyC7vqIu9_i9McRi7PwduOidNkfdVNAVPA8",
+  authDomain: "aaradhya-planner.firebaseapp.com",
+  projectId: "aaradhya-planner",
+  storageBucket: "aaradhya-planner.firebasestorage.app",
   messagingSenderId: "336018001605",
-  appId:             "1:336018001605:web:eed645e2f25726e0a0aaac"
+  appId: "1:336018001605:web:eed645e2f25726e0a0aaac",
+  measurementId: "G-XC4FB581KR"
+
 };
 
 /* ADMIN EMAIL — only this email can access Admin Panel */
-const ADMIN_EMAIL = "aaradhya.ai26@gmail.com";
+const ADMIN_EMAIL = "AARADHYA.AI26@GMAIL.COM";
 
 /* ============================================================
    INIT FIREBASE
@@ -1009,33 +1012,45 @@ let pinMode     = 'enter'; // 'setup' | 'confirm' | 'enter'
 let pinTemp     = '';      // for confirm step
 
 window.addEventListener('load', () => {
+  // Safety net — show auth screen if Firebase takes too long (mobile fix)
+  const safetyTimer = setTimeout(() => {
+    const splash = document.getElementById('splashScreen');
+    if (splash && !splash.classList.contains('gone')) {
+      hideSplash();
+      showScreen('authScreen');
+    }
+  }, 6000);
+
   // Check for email sign-in link
-  if (auth.isSignInWithEmailLink(window.location.href)) {
-    handleEmailLink();
-    return;
-  }
+  try {
+    if (auth.isSignInWithEmailLink(window.location.href)) {
+      clearTimeout(safetyTimer);
+      handleEmailLink();
+      return;
+    }
+  } catch(e) { console.log('Link check:', e); }
 
   // Show splash then check auth
   setTimeout(() => {
-    auth.onAuthStateChanged(async user => {
+    try {
+      auth.onAuthStateChanged(async user => {
+        clearTimeout(safetyTimer);
+        hideSplash();
+        if (!user) { showScreen('authScreen'); return; }
+        currentUser = user;
+        try {
+          const revoked = await isDeviceRevoked();
+          if (revoked) { await auth.signOut(); showScreen('authScreen'); return; }
+        } catch(e) { console.log('Revoke check:', e); }
+        const hasPin = localStorage.getItem('_pin');
+        if (!hasPin) { startPinSetup(); }
+        else { showScreen('pinScreen'); setPinUI('enter'); }
+      });
+    } catch(e) {
+      clearTimeout(safetyTimer);
       hideSplash();
-      if (!user) {
-        showScreen('authScreen');
-        return;
-      }
-      currentUser = user;
-      // Check if this device session is revoked
-      const revoked = await isDeviceRevoked();
-      if (revoked) { await auth.signOut(); showScreen('authScreen'); return; }
-      // Check PIN
-      const hasPin = localStorage.getItem('_pin');
-      if (!hasPin) {
-        startPinSetup();
-      } else {
-        showScreen('pinScreen');
-        setPinUI('enter');
-      }
-    });
+      showScreen('authScreen');
+    }
   }, 1500);
 });
 
