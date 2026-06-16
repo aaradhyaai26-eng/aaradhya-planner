@@ -1011,52 +1011,52 @@ let pinMode     = 'enter'; // 'setup' | 'confirm' | 'enter'
 let pinTemp     = '';      // for confirm step
 
 window.addEventListener('load', () => {
-  // Safety net — show auth screen if Firebase takes too long (mobile fix)
+  // Show auth screen after 2.5 seconds NO MATTER WHAT (mobile fix)
   const safetyTimer = setTimeout(() => {
-    const splash = document.getElementById('splashScreen');
-    if (splash && !splash.classList.contains('gone')) {
-      hideSplash();
-      showScreen('authScreen');
-    }
-  }, 6000);
+    hideSplash();
+    showScreen('authScreen');
+  }, 2500);
 
-  // Check for email sign-in link
+  // Check for email sign-in link immediately
   try {
-    if (auth.isSignInWithEmailLink(window.location.href)) {
+    if (firebase.auth().isSignInWithEmailLink(window.location.href)) {
       clearTimeout(safetyTimer);
+      hideSplash();
       handleEmailLink();
       return;
     }
   } catch(e) { console.log('Link check:', e); }
 
-  // Show splash then check auth
-  setTimeout(() => {
-    try {
-      auth.onAuthStateChanged(async user => {
-        clearTimeout(safetyTimer);
-        hideSplash();
-        if (!user) { showScreen('authScreen'); return; }
-        currentUser = user;
-        try {
-          const revoked = await isDeviceRevoked();
-          if (revoked) { await auth.signOut(); showScreen('authScreen'); return; }
-        } catch(e) { console.log('Revoke check:', e); }
-        const hasPin = localStorage.getItem('_pin');
-        if (!hasPin) { startPinSetup(); }
-        else { showScreen('pinScreen'); setPinUI('enter'); }
-      });
-    } catch(e) {
+  // Also check auth state
+  try {
+    firebase.auth().onAuthStateChanged(async user => {
       clearTimeout(safetyTimer);
       hideSplash();
-      showScreen('authScreen');
-    }
-  }, 1500);
+      if (!user) { showScreen('authScreen'); return; }
+      currentUser = user;
+      try {
+        const revoked = await isDeviceRevoked();
+        if (revoked) { await firebase.auth().signOut(); showScreen('authScreen'); return; }
+      } catch(e) { console.log('Revoke check:', e); }
+      const hasPin = localStorage.getItem('_pin');
+      if (!hasPin) { startPinSetup(); }
+      else { showScreen('pinScreen'); setPinUI('enter'); }
+    });
+  } catch(e) {
+    clearTimeout(safetyTimer);
+    hideSplash();
+    showScreen('authScreen');
+  }
 });
 
 function hideSplash() {
-  const s = document.getElementById('splashScreen');
-  s.classList.add('hidden');
-  setTimeout(() => s.classList.add('gone'), 500);
+  try {
+    const s = document.getElementById('splashScreen');
+    if (!s) return;
+    s.style.opacity = '0';
+    s.style.pointerEvents = 'none';
+    setTimeout(() => { s.style.display = 'none'; }, 400);
+  } catch(e) {}
 }
 function showScreen(id) {
   ['authScreen','pinScreen'].forEach(s => {
