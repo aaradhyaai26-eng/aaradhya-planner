@@ -963,7 +963,7 @@ input, select, textarea { font-family: inherit; }
    (Step 3 of the setup guide below)
    ============================================================ */
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC7vqIu9_i9McRi7PwduOidNkfdVNAVPA8",
+   apiKey: "AIzaSyC7vqIu9_i9McRi7PwduOidNkfdVNAVPA8",
   authDomain: "aaradhya-planner.firebaseapp.com",
   projectId: "aaradhya-planner",
   storageBucket: "aaradhya-planner.firebasestorage.app",
@@ -971,10 +971,9 @@ const FIREBASE_CONFIG = {
   appId: "1:336018001605:web:eed645e2f25726e0a0aaac",
   measurementId: "G-XC4FB581KR"
 
-};
 
 /* ADMIN EMAIL — only this email can access Admin Panel */
-const ADMIN_EMAIL = "AARADHYA.AI26@GMAIL.COM";
+const ADMIN_EMAIL = "aaradhya.ai26@gmail.com";
 
 /* ============================================================
    INIT FIREBASE
@@ -1081,28 +1080,45 @@ function showApp() {
    EMAIL SIGN-IN  (passwordless magic link)
    ============================================================ */
 async function sendSignInLink() {
-  const email = document.getElementById('authEmail').value.trim();
-  if (!email || !email.includes('@')) { showToast('Please enter a valid email'); return; }
+  // Get email
+  const emailEl = document.getElementById('authEmail');
+  const noteEl  = document.getElementById('authNote');
+  const btnEl   = document.querySelector('.auth-btn');
+  const email   = (emailEl.value || '').trim().toLowerCase();
 
-  // Check whitelist (only allowed emails)
-  const allowed = [ADMIN_EMAIL]; // add family emails here if needed
-  if (!allowed.includes(email.toLowerCase())) {
-    showToast('❌ This email is not authorised');
+  // Validate
+  if (!email || !email.includes('@') || !email.includes('.')) {
+    noteEl.innerHTML = '⚠️ Please enter a valid email address.';
     return;
   }
 
+  // Check whitelist
+  const allowed = [ADMIN_EMAIL.toLowerCase()];
+  if (!allowed.includes(email)) {
+    noteEl.innerHTML = '❌ This email is not authorised to access this app.';
+    return;
+  }
+
+  // Show loading state
+  if (btnEl) { btnEl.textContent = 'Sending…'; btnEl.disabled = true; }
+  noteEl.innerHTML = '⏳ Sending sign-in link…';
+
+  // Build action URL — always use the base app URL not current URL
+  const baseUrl = window.location.origin + window.location.pathname;
   const actionCodeSettings = {
-    url: window.location.href,
+    url: baseUrl,
     handleCodeInApp: true
   };
+
   try {
     await auth.sendSignInLinkToEmail(email, actionCodeSettings);
     localStorage.setItem('_pendingEmail', email);
-    document.getElementById('authNote').innerHTML =
-      '✅ Link sent! Check your email inbox.<br/>Click the link in the email — this device will be remembered forever.';
-    showToast('📧 Sign-in link sent to ' + email);
+    noteEl.innerHTML = '✅ Link sent to <strong>' + email + '</strong>!<br/>Check your inbox and spam folder.<br/>Click the link in the email to sign in.';
+    if (btnEl) { btnEl.textContent = '✅ Link Sent!'; }
   } catch(e) {
-    showToast('Error: ' + e.message);
+    console.error('SendLink error:', e);
+    noteEl.innerHTML = '❌ Error: ' + (e.message || 'Unknown error') + '<br/>Please try again.';
+    if (btnEl) { btnEl.textContent = 'Send Sign-In Link →'; btnEl.disabled = false; }
   }
 }
 
