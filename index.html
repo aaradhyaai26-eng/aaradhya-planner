@@ -971,8 +971,6 @@ const FIREBASE_CONFIG = {
   appId: "1:336018001605:web:eed645e2f25726e0a0aaac",
   measurementId: "G-XC4FB581KR"
 
-};
-
 /* ADMIN EMAIL — only this email can access Admin Panel */
 const ADMIN_EMAIL = "aaradhya.ai26@gmail.com";
 
@@ -984,12 +982,68 @@ const auth = firebase.auth();
 const db   = firebase.firestore();
 
 /* ============================================================
-   LOCAL DATA STORE  (localStorage, per-device)
+   DATA STORE — Firebase Firestore (syncs across all devices)
    ============================================================ */
 const DB = {
-  get:  k => JSON.parse(localStorage.getItem(k) || '[]'),
-  set:  (k,v) => localStorage.setItem(k, JSON.stringify(v)),
-  push: (k,v) => { const a = DB.get(k); a.push(v); DB.set(k,a); }
+  // Get all records from Firestore for current user
+  get: async (k) => {
+    try {
+      if (!currentUser) return JSON.parse(localStorage.getItem(k) || '[]');
+      const snap = await db.collection('users')
+        .doc(currentUser.uid)
+        .collection(k)
+        .orderBy('created', 'asc')
+        .get();
+      const data = [];
+      snap.forEach(d => data.push({ id: d.id, ...d.data() }));
+      // Also cache locally for offline
+      localStorage.setItem(k, JSON.stringify(data));
+      return data;
+    } catch(e) {
+      // Fallback to localStorage if offline
+      return JSON.parse(localStorage.getItem(k) || '[]');
+    }
+  },
+  // Save all records (replaces entire collection)
+  set: async (k, arr) => {
+    try {
+      localStorage.setItem(k, JSON.stringify(arr));
+      if (!currentUser) return;
+      const col = db.collection('users').doc(currentUser.uid).collection(k);
+      const batch = db.batch();
+      // Delete all existing
+      const existing = await col.get();
+      existing.forEach(d => batch.delete(d.ref));
+      // Add all new
+      arr.forEach(item => {
+        const ref = col.doc(item.id || uid());
+        batch.set(ref, item);
+      });
+      await batch.commit();
+    } catch(e) {
+      localStorage.setItem(k, JSON.stringify(arr));
+    }
+  },
+  // Add one record
+  push: async (k, v) => {
+    try {
+      localStorage.setItem(k, JSON.stringify(
+        [...JSON.parse(localStorage.getItem(k)||'[]'), v]
+      ));
+      if (!currentUser) return;
+      await db.collection('users')
+        .doc(currentUser.uid)
+        .collection(k)
+        .doc(v.id || uid())
+        .set(v);
+    } catch(e) {
+      const a = JSON.parse(localStorage.getItem(k)||'[]');
+      a.push(v);
+      localStorage.setItem(k, JSON.stringify(a));
+    }
+  },
+  // Get from local cache only (sync/fast)
+  getLocal: (k) => JSON.parse(localStorage.getItem(k) || '[]')
 };
 
 const uid       = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
@@ -1400,8 +1454,29 @@ async function doSignOut() {
 /* ============================================================
    APP INIT
    ============================================================ */
-function initApp() {
+async function initApp() {
   setGreeting();
+  document.getElementById('t-date').value = todayStr();
+
+  // Show loading indicator
+  showToast('⏳ Loading your data…');
+
+  // Load all data from Firestore into local cache first
+  try {
+    await Promise.all([
+      DB.get('tasks'),
+      DB.get('leads'),
+      DB.get('referrals'),
+      DB.get('sips'),
+      DB.get('insurance'),
+      DB.get('reviews')
+    ]);
+    showToast('✅ Data loaded!');
+  } catch(e) {
+    showToast('📴 Offline — showing cached data');
+  }
+
+  // Now render everything from local cache
   updateDashboard();
   renderTasks();
   renderLeads();
@@ -1412,7 +1487,7 @@ function initApp() {
   renderReports();
   scheduleReminders();
   checkTodayTasks();
-  document.getElementById('t-date').value = todayStr();
+
   // Ping last-seen every 5 min
   setInterval(updateLastSeen, 5*60*1000);
 }
@@ -1487,11 +1562,11 @@ function showToast(msg) {
    DASHBOARD
    ============================================================ */
 function updateDashboard() {
-  const tasks     = DB.get('tasks');
-  const leads     = DB.get('leads');
-  const referrals = DB.get('referrals');
-  const sips      = DB.get('sips');
-  const insurance = DB.get('insurance');
+  const tasks     = DB.getLocal('tasks');
+  const leads     = DB.getLocal('leads');
+  const referrals = DB.getLocal('referrals');
+  const sips      = DB.getLocal('sips');
+  const insurance = DB.getLocal('insurance');
   const today     = todayStr();
 
   const todayTasks = tasks.filter(t => t.dueDate===today && t.status!=='Completed');
@@ -1564,7 +1639,7 @@ function taskCard(t, mini=false) {
 }
 
 function renderTasks() {
-  const tasks = DB.get('tasks');
+  const tasks = DB.getLocal('tasks');
   const q = (document.getElementById('taskSearch')?.value||'').toLowerCase();
   const today = todayStr();
   const wEnd  = new Date(); wEnd.setDate(wEnd.getDate()+7);
@@ -1583,14 +1658,14 @@ function renderTasks() {
   el.innerHTML = list.length ? list.map(t=>taskCard(t)).join('') : '<div class="empty-state"><div class="empty-icon">✅</div><h3>No tasks found</h3><p>All clear!</p></div>';
 }
 
-function toggleTask(id) {
-  const tasks = DB.get('tasks'); const t = tasks.find(t=>t.id===id);
-  if (t) { t.status = t.status==='Completed'?'Pending':'Completed'; DB.set('tasks',tasks); }
+async function toggleTask(id) {
+  const tasks = DB.getLocal('tasks'); const t = tasks.find(t=>t.id===id);
+  if (t) { t.status = t.status==='Completed'?'Pending':'Completed'; await DB.set('tasks',tasks); }
   renderTasks(); updateDashboard();
 }
 function completeTask(id) { toggleTask(id); showToast('🎉 Task completed!'); }
 function snoozeTask(id) {
-  const tasks = DB.get('tasks'); const t = tasks.find(t=>t.id===id);
+  const tasks = DB.getLocal('tasks'); const t = tasks.find(t=>t.id===id);
   if (t && t.dueDate) { const d=new Date(t.dueDate+'T12:00:00'); d.setDate(d.getDate()+1); t.dueDate=d.toISOString().slice(0,10); DB.set('tasks',tasks); showToast('⏰ Snoozed to tomorrow'); renderTasks(); updateDashboard(); }
 }
 
@@ -1615,7 +1690,7 @@ function saveLead() {
   renderLeads(); updateDashboard();
 }
 function renderLeads() {
-  const leads = DB.get('leads');
+  const leads = DB.getLocal('leads');
   const q = (document.getElementById('leadSearch')?.value||'').toLowerCase();
   let list = leads.filter(l=>{ if(q&&!l.name.toLowerCase().includes(q)&&!(l.mobile||'').includes(q))return false; if(leadFilter!=='all'&&l.status!==leadFilter)return false; return true; }).reverse();
   const el = document.getElementById('leadList');
@@ -1644,7 +1719,7 @@ function saveReferral(){
   renderReferrals(); updateDashboard();
 }
 function renderReferrals(){
-  const refs=DB.get('referrals').reverse();
+  const refs=DB.getLocal('referrals').reverse();
   const el=document.getElementById('referralsSection');
   if(!refs.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">🤝</div><h3>No referrals yet</h3></div>';return;}
   el.innerHTML=refs.map(r=>`<div class="list-card">
@@ -1667,7 +1742,7 @@ function saveSIP(){
   showToast('📈 SIP case saved!'); renderSIP(); updateDashboard();
 }
 function renderSIP(){
-  const sips=DB.get('sips').reverse();
+  const sips=DB.getLocal('sips').reverse();
   const el=document.getElementById('sipSection');
   if(!sips.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📈</div><h3>No SIP cases yet</h3></div>';return;}
   el.innerHTML=sips.map(s=>`<div class="list-card">
@@ -1689,7 +1764,7 @@ function saveInsurance(){
   showToast('🛡️ Insurance case saved!'); renderInsurance(); updateDashboard();
 }
 function renderInsurance(){
-  const ins=DB.get('insurance').reverse();
+  const ins=DB.getLocal('insurance').reverse();
   const el=document.getElementById('insuranceSection');
   if(!ins.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">🛡️</div><h3>No insurance cases yet</h3></div>';return;}
   el.innerHTML=ins.map(i=>`<div class="list-card">
@@ -1711,7 +1786,7 @@ function setFollowTab(tab,el){
   renderFollowup();
 }
 function renderFollowup(){
-  const tasks=DB.get('tasks'),today=todayStr(),tomorrow=tomorrowStr();
+  const tasks=DB.getLocal('tasks'),today=todayStr(),tomorrow=tomorrowStr();
   let list;
   if(followTab==='today')    list=tasks.filter(t=>t.dueDate===today&&t.status!=='Completed');
   else if(followTab==='tomorrow') list=tasks.filter(t=>t.dueDate===tomorrow&&t.status!=='Completed');
@@ -1736,11 +1811,11 @@ function renderReports(){
   const mStart=new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().slice(0,10);
   const thisMonth=arr=>arr.filter(i=>(i.created||'').slice(0,10)>=mStart);
   const data=[
-    {icon:'✅',bg:'#EEF3FF',label:'Tasks Completed This Month',count:thisMonth(DB.get('tasks')).filter(t=>t.status==='Completed').length},
-    {icon:'👤',bg:'#FFF8E1',label:'New Leads This Month',count:thisMonth(DB.get('leads')).length},
-    {icon:'🤝',bg:'#F3E5F5',label:'Referrals This Month',count:thisMonth(DB.get('referrals')).length},
-    {icon:'📈',bg:'#E8F5E9',label:'SIP Cases This Month',count:thisMonth(DB.get('sips')).length},
-    {icon:'🛡️',bg:'#FBE9E7',label:'Insurance Cases This Month',count:thisMonth(DB.get('insurance')).length},
+    {icon:'✅',bg:'#EEF3FF',label:'Tasks Completed This Month',count:thisMonth(DB.getLocal('tasks')).filter(t=>t.status==='Completed').length},
+    {icon:'👤',bg:'#FFF8E1',label:'New Leads This Month',count:thisMonth(DB.getLocal('leads')).length},
+    {icon:'🤝',bg:'#F3E5F5',label:'Referrals This Month',count:thisMonth(DB.getLocal('referrals')).length},
+    {icon:'📈',bg:'#E8F5E9',label:'SIP Cases This Month',count:thisMonth(DB.getLocal('sips')).length},
+    {icon:'🛡️',bg:'#FBE9E7',label:'Insurance Cases This Month',count:thisMonth(DB.getLocal('insurance')).length},
   ];
   document.getElementById('reportsSection').innerHTML=data.map(d=>`<div class="report-card"><div class="report-icon" style="background:${d.bg}">${d.icon}</div><div class="report-info"><div class="r-count">${d.count}</div><div class="r-label">${d.label}</div></div></div>`).join('');
 }
@@ -1763,7 +1838,7 @@ function statusClass(s){
    REMINDERS & DAILY CHECK
    ============================================================ */
 function checkTodayTasks(){
-  const hasToday=DB.get('tasks').some(t=>t.created&&t.created.slice(0,10)===todayStr());
+  const hasToday=DB.getLocal('tasks').some(t=>t.created&&t.created.slice(0,10)===todayStr());
   document.getElementById('reminderBanner').classList.toggle('show',!hasToday);
   document.getElementById('notifBadge').classList.toggle('show',!hasToday);
 }
@@ -1777,7 +1852,7 @@ function scheduleReminders(){
       if(localStorage.getItem('reminded-'+key))return;
       if(n.getHours()===t.h&&n.getMinutes()===t.m){
         localStorage.setItem('reminded-'+key,'1');
-        const hasToday=DB.get('tasks').some(tk=>tk.created&&tk.created.slice(0,10)===today);
+        const hasToday=DB.getLocal('tasks').some(tk=>tk.created&&tk.created.slice(0,10)===today);
         if(!hasToday)openModal('reminderPopup');
         if(t.h===20)showReviewPrompt();
         if(Notification.permission==='granted'){
@@ -1793,7 +1868,7 @@ function scheduleReminders(){
 
 function showReviewPrompt(){
   document.getElementById('reviewDateLabel').textContent=new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
-  const today=todayStr(),tasks=DB.get('tasks');
+  const today=todayStr(),tasks=DB.getLocal('tasks');
   document.getElementById('rv-completed').value=tasks.filter(t=>t.status==='Completed'&&t.dueDate===today).length;
   document.getElementById('rv-pending').value=tasks.filter(t=>t.status==='Pending'&&t.dueDate===today).length;
   openModal('reviewModal');
@@ -1801,7 +1876,7 @@ function showReviewPrompt(){
 
 function saveReview(){
   const review={date:todayStr(),completed:document.getElementById('rv-completed').value,pending:document.getElementById('rv-pending').value,tomorrow:document.getElementById('rv-tomorrow').value,saved:new Date().toISOString()};
-  const reviews=DB.get('reviews');
+  const reviews=DB.getLocal('reviews');
   const idx=reviews.findIndex(r=>r.date===review.date);
   if(idx>=0)reviews[idx]=review;else reviews.push(review);
   DB.set('reviews',reviews);
@@ -1849,7 +1924,7 @@ function setFollowTabMore(tab,el){
 }
 
 function renderFollowupMore(tab){
-  const tasks=DB.get('tasks'),today=todayStr(),tomorrow=tomorrowStr();
+  const tasks=DB.getLocal('tasks'),today=todayStr(),tomorrow=tomorrowStr();
   let list;
   if(tab==='today')    list=tasks.filter(t=>t.dueDate===today&&t.status!=='Completed');
   else if(tab==='tomorrow') list=tasks.filter(t=>t.dueDate===tomorrow&&t.status!=='Completed');
@@ -1879,23 +1954,23 @@ function runUniversalSearch(){
   }
   const results=[];
 
-  DB.get('tasks').forEach(t=>{
+  DB.getLocal('tasks').forEach(t=>{
     if(t.title.toLowerCase().includes(q)||( t.desc&&t.desc.toLowerCase().includes(q)))
       results.push({type:'Task',icon:'✅',bg:'#EEF3FF',title:t.title,sub:`${t.category} · ${t.priority} · ${fmtDate(t.dueDate)||'No date'}`,badge:t.status,badgeClass:t.status==='Completed'?'s-converted':'s-new'});
   });
-  DB.get('leads').forEach(l=>{
+  DB.getLocal('leads').forEach(l=>{
     if(l.name.toLowerCase().includes(q)||(l.mobile&&l.mobile.includes(q))||(l.city&&l.city.toLowerCase().includes(q)))
       results.push({type:'Lead',icon:'👤',bg:'#FFF8E1',title:l.name,sub:`📱 ${l.mobile||'–'} · ${l.interest} · ${l.city||'–'}`,badge:l.status,badgeClass:statusClass(l.status)});
   });
-  DB.get('referrals').forEach(r=>{
+  DB.getLocal('referrals').forEach(r=>{
     if(r.name.toLowerCase().includes(q)||(r.mobile&&r.mobile.includes(q))||r.refName.toLowerCase().includes(q))
       results.push({type:'Referral',icon:'🤝',bg:'#F3E5F5',title:r.name,sub:`Referred by ${r.refName} · ${r.product}`,badge:r.status,badgeClass:statusClass(r.status)});
   });
-  DB.get('sips').forEach(s=>{
+  DB.getLocal('sips').forEach(s=>{
     if(s.name.toLowerCase().includes(q))
       results.push({type:'SIP',icon:'📈',bg:'#E8F5E9',title:s.name,sub:`₹${s.amount?Number(s.amount).toLocaleString('en-IN'):'–'}/mo · ${s.fund}`,badge:s.status,badgeClass:statusClass(s.status)});
   });
-  DB.get('insurance').forEach(i=>{
+  DB.getLocal('insurance').forEach(i=>{
     if(i.name.toLowerCase().includes(q))
       results.push({type:'Insurance',icon:'🛡️',bg:'#FBE9E7',title:i.name,sub:`${i.type} · ₹${i.premium?Number(i.premium).toLocaleString('en-IN'):'–'}`,badge:i.status,badgeClass:statusClass(i.status)});
   });
@@ -1944,12 +2019,12 @@ async function syncToSheets(){
   localStorage.setItem('_sheetUrl',url);
   showToast('☁️ Syncing…');
   const payload={
-    Tasks:      DB.get('tasks'),
-    Leads:      DB.get('leads'),
-    Referrals:  DB.get('referrals'),
-    SIP:        DB.get('sips'),
-    Insurance:  DB.get('insurance'),
-    DailyReview:DB.get('reviews')
+    Tasks:      DB.getLocal('tasks'),
+    Leads:      DB.getLocal('leads'),
+    Referrals:  DB.getLocal('referrals'),
+    SIP:        DB.getLocal('sips'),
+    Insurance:  DB.getLocal('insurance'),
+    DailyReview:DB.getLocal('reviews')
   };
   try{
     const r=await fetch(url,{method:'POST',body:JSON.stringify({action:'syncAll',payload})});
@@ -1964,12 +2039,12 @@ async function syncToSheets(){
 function exportData(){
   const data={
     exportedAt: new Date().toISOString(),
-    tasks:      DB.get('tasks'),
-    leads:      DB.get('leads'),
-    referrals:  DB.get('referrals'),
-    sips:       DB.get('sips'),
-    insurance:  DB.get('insurance'),
-    reviews:    DB.get('reviews')
+    tasks:      DB.getLocal('tasks'),
+    leads:      DB.getLocal('leads'),
+    referrals:  DB.getLocal('referrals'),
+    sips:       DB.getLocal('sips'),
+    insurance:  DB.getLocal('insurance'),
+    reviews:    DB.getLocal('reviews')
   };
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');
