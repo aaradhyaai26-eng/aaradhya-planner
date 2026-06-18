@@ -963,14 +963,13 @@ input, select, textarea { font-family: inherit; }
    (Step 3 of the setup guide below)
    ============================================================ */
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC7vqIu9_i9McRi7PwduOidNkfdVNAVPA8",
+ apiKey: "AIzaSyC7vqIu9_i9McRi7PwduOidNkfdVNAVPA8",
   authDomain: "aaradhya-planner.firebaseapp.com",
   projectId: "aaradhya-planner",
   storageBucket: "aaradhya-planner.firebasestorage.app",
   messagingSenderId: "336018001605",
   appId: "1:336018001605:web:eed645e2f25726e0a0aaac",
   measurementId: "G-XC4FB581KR"
-
 };
 
 /* ADMIN EMAIL — only this email can access Admin Panel */
@@ -984,69 +983,83 @@ const auth = firebase.auth();
 const db   = firebase.firestore();
 
 /* ============================================================
-   DATA STORE — Firebase Firestore (syncs across all devices)
+   DATA STORE — Firebase Firestore (real-time sync)
    ============================================================ */
 const DB = {
-  // Get all records from Firestore for current user
-  get: async (k) => {
+  // Save single item to Firestore + localStorage
+  push: (k, v) => {
     try {
-      if (!currentUser) return JSON.parse(localStorage.getItem(k) || '[]');
-      const snap = await db.collection('users')
-        .doc(currentUser.uid)
-        .collection(k)
-        .orderBy('created', 'asc')
-        .get();
-      const data = [];
-      snap.forEach(d => data.push({ id: d.id, ...d.data() }));
-      // Also cache locally for offline
-      localStorage.setItem(k, JSON.stringify(data));
-      return data;
-    } catch(e) {
-      // Fallback to localStorage if offline
-      return JSON.parse(localStorage.getItem(k) || '[]');
-    }
-  },
-  // Save all records (replaces entire collection)
-  set: async (k, arr) => {
-    try {
-      localStorage.setItem(k, JSON.stringify(arr));
-      if (!currentUser) return;
-      const col = db.collection('users').doc(currentUser.uid).collection(k);
-      const batch = db.batch();
-      // Delete all existing
-      const existing = await col.get();
-      existing.forEach(d => batch.delete(d.ref));
-      // Add all new
-      arr.forEach(item => {
-        const ref = col.doc(item.id || uid());
-        batch.set(ref, item);
-      });
-      await batch.commit();
-    } catch(e) {
-      localStorage.setItem(k, JSON.stringify(arr));
-    }
-  },
-  // Add one record
-  push: async (k, v) => {
-    try {
-      localStorage.setItem(k, JSON.stringify(
-        [...JSON.parse(localStorage.getItem(k)||'[]'), v]
-      ));
-      if (!currentUser) return;
-      await db.collection('users')
-        .doc(currentUser.uid)
-        .collection(k)
-        .doc(v.id || uid())
-        .set(v);
-    } catch(e) {
+      // Save to localStorage immediately
       const a = JSON.parse(localStorage.getItem(k)||'[]');
       a.push(v);
       localStorage.setItem(k, JSON.stringify(a));
+      // Save to Firestore in background
+      if (currentUser) {
+        db.collection('users')
+          .doc(currentUser.uid)
+          .collection(k)
+          .doc(v.id)
+          .set(v)
+          .catch(e => console.log('Firestore push error:', e));
+      }
+    } catch(e) {
+      console.log('DB.push error:', e);
     }
   },
-  // Get from local cache only (sync/fast)
-  getLocal: (k) => JSON.parse(localStorage.getItem(k) || '[]')
+  // Update entire collection in Firestore + localStorage
+  set: (k, arr) => {
+    try {
+      // Save to localStorage immediately
+      localStorage.setItem(k, JSON.stringify(arr));
+      // Sync to Firestore in background
+      if (currentUser) {
+        const col = db.collection('users').doc(currentUser.uid).collection(k);
+        // Delete removed items and upsert all current
+        const batch = db.batch();
+        arr.forEach(item => {
+          const ref = col.doc(item.id);
+          batch.set(ref, item);
+        });
+        batch.commit().catch(e => console.log('Firestore set error:', e));
+      }
+    } catch(e) {
+      console.log('DB.set error:', e);
+    }
+  },
+  // Get from localStorage (instant, no waiting)
+  getLocal: (k) => JSON.parse(localStorage.getItem(k) || '[]'),
+  // Get from localStorage (alias for compatibility)
+  get: (k) => JSON.parse(localStorage.getItem(k) || '[]')
 };
+
+/* ============================================================
+   REAL-TIME LISTENERS — auto refresh when data changes
+   ============================================================ */
+const listeners = {};
+function startRealtimeSync() {
+  if (!currentUser) return;
+  const collections = ['tasks','leads','referrals','sips','insurance'];
+  collections.forEach(k => {
+    // Unsubscribe existing listener
+    if (listeners[k]) listeners[k]();
+    // Start new listener
+    listeners[k] = db.collection('users')
+      .doc(currentUser.uid)
+      .collection(k)
+      .onSnapshot(snap => {
+        const data = [];
+        snap.forEach(d => data.push({ id: d.id, ...d.data() }));
+        // Update localStorage cache
+        localStorage.setItem(k, JSON.stringify(data));
+        // Refresh UI
+        if (k === 'tasks')     { renderTasks(); updateDashboard(); checkTodayTasks(); }
+        if (k === 'leads')     { renderLeads(); updateDashboard(); }
+        if (k === 'referrals') { renderReferrals(); updateDashboard(); }
+        if (k === 'sips')      { renderSIP(); updateDashboard(); }
+        if (k === 'insurance') { renderInsurance(); updateDashboard(); }
+      }, e => console.log('Listener error for', k, e));
+  });
+}
 
 const uid       = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const todayStr  = () => new Date().toISOString().slice(0,10);
@@ -1456,29 +1469,11 @@ async function doSignOut() {
 /* ============================================================
    APP INIT
    ============================================================ */
-async function initApp() {
+function initApp() {
   setGreeting();
   document.getElementById('t-date').value = todayStr();
 
-  // Show loading indicator
-  showToast('⏳ Loading your data…');
-
-  // Load all data from Firestore into local cache first
-  try {
-    await Promise.all([
-      DB.get('tasks'),
-      DB.get('leads'),
-      DB.get('referrals'),
-      DB.get('sips'),
-      DB.get('insurance'),
-      DB.get('reviews')
-    ]);
-    showToast('✅ Data loaded!');
-  } catch(e) {
-    showToast('📴 Offline — showing cached data');
-  }
-
-  // Now render everything from local cache
+  // Render from local cache instantly
   updateDashboard();
   renderTasks();
   renderLeads();
@@ -1489,6 +1484,10 @@ async function initApp() {
   renderReports();
   scheduleReminders();
   checkTodayTasks();
+
+  // Start real-time sync — data will auto-update from Firestore
+  startRealtimeSync();
+  showToast('✅ Syncing data…');
 
   // Ping last-seen every 5 min
   setInterval(updateLastSeen, 5*60*1000);
