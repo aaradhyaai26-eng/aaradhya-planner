@@ -1455,6 +1455,7 @@ function initApp() {
   checkTodayTasks();
 
   // Start real-time sync — data will auto-update from Firestore
+   console.log('Sync starting for user:', currentUser.uid);
   startRealtimeSync();
   showToast('✅ Syncing data…');
 
