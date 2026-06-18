@@ -963,13 +963,14 @@ input, select, textarea { font-family: inherit; }
    (Step 3 of the setup guide below)
    ============================================================ */
 const FIREBASE_CONFIG = {
- apiKey: "AIzaSyC7vqIu9_i9McRi7PwduOidNkfdVNAVPA8",
+   apiKey: "AIzaSyC7vqIu9_i9McRi7PwduOidNkfdVNAVPA8",
   authDomain: "aaradhya-planner.firebaseapp.com",
   projectId: "aaradhya-planner",
   storageBucket: "aaradhya-planner.firebasestorage.app",
   messagingSenderId: "336018001605",
   appId: "1:336018001605:web:eed645e2f25726e0a0aaac",
   measurementId: "G-XC4FB581KR"
+
 };
 
 /* ADMIN EMAIL — only this email can access Admin Panel */
@@ -983,81 +984,49 @@ const auth = firebase.auth();
 const db   = firebase.firestore();
 
 /* ============================================================
-   DATA STORE — Firebase Firestore (real-time sync)
+   DATA STORE — saves locally + syncs to Firestore
    ============================================================ */
 const DB = {
-  // Save single item to Firestore + localStorage
-  push: (k, v) => {
-    try {
-      // Save to localStorage immediately
-      const a = JSON.parse(localStorage.getItem(k)||'[]');
-      a.push(v);
-      localStorage.setItem(k, JSON.stringify(a));
-      // Save to Firestore in background
-      if (currentUser) {
-        db.collection('users')
-          .doc(currentUser.uid)
-          .collection(k)
-          .doc(v.id)
-          .set(v)
-          .catch(e => console.log('Firestore push error:', e));
-      }
-    } catch(e) {
-      console.log('DB.push error:', e);
-    }
+  get:      k => JSON.parse(localStorage.getItem(k)||'[]'),
+  getLocal: k => JSON.parse(localStorage.getItem(k)||'[]'),
+  push: (k,v) => {
+    const a = JSON.parse(localStorage.getItem(k)||'[]');
+    a.push(v); localStorage.setItem(k,JSON.stringify(a));
+    if(currentUser) db.collection('users').doc(currentUser.uid)
+      .collection(k).doc(v.id).set(v).catch(()=>{});
   },
-  // Update entire collection in Firestore + localStorage
-  set: (k, arr) => {
-    try {
-      // Save to localStorage immediately
-      localStorage.setItem(k, JSON.stringify(arr));
-      // Sync to Firestore in background
-      if (currentUser) {
-        const col = db.collection('users').doc(currentUser.uid).collection(k);
-        // Delete removed items and upsert all current
-        const batch = db.batch();
-        arr.forEach(item => {
-          const ref = col.doc(item.id);
-          batch.set(ref, item);
-        });
-        batch.commit().catch(e => console.log('Firestore set error:', e));
-      }
-    } catch(e) {
-      console.log('DB.set error:', e);
-    }
-  },
-  // Get from localStorage (instant, no waiting)
-  getLocal: (k) => JSON.parse(localStorage.getItem(k) || '[]'),
-  // Get from localStorage (alias for compatibility)
-  get: (k) => JSON.parse(localStorage.getItem(k) || '[]')
+  set: (k,arr) => {
+    localStorage.setItem(k,JSON.stringify(arr));
+    if(!currentUser) return;
+    const col = db.collection('users').doc(currentUser.uid).collection(k);
+    const batch = db.batch();
+    arr.forEach(item => batch.set(col.doc(item.id), item));
+    batch.commit().catch(()=>{});
+  }
 };
 
 /* ============================================================
-   REAL-TIME LISTENERS — auto refresh when data changes
+   REAL-TIME SYNC — listens for changes from other devices
    ============================================================ */
 const listeners = {};
 function startRealtimeSync() {
-  if (!currentUser) return;
-  const collections = ['tasks','leads','referrals','sips','insurance'];
-  collections.forEach(k => {
-    // Unsubscribe existing listener
-    if (listeners[k]) listeners[k]();
-    // Start new listener
-    listeners[k] = db.collection('users')
-      .doc(currentUser.uid)
+  if(!currentUser) return;
+  [['tasks', ()=>{ renderTasks(); updateDashboard(); checkTodayTasks(); }],
+   ['leads', ()=>{ renderLeads(); updateDashboard(); }],
+   ['referrals', ()=>{ renderReferrals(); updateDashboard(); }],
+   ['sips', ()=>{ renderSIP(); updateDashboard(); }],
+   ['insurance', ()=>{ renderInsurance(); updateDashboard(); }]
+  ].forEach(([k, refresh]) => {
+    if(listeners[k]) listeners[k]();
+    listeners[k] = db.collection('users').doc(currentUser.uid)
       .collection(k)
       .onSnapshot(snap => {
         const data = [];
-        snap.forEach(d => data.push({ id: d.id, ...d.data() }));
-        // Update localStorage cache
+        snap.forEach(d => { const item=d.data(); if(!item.id) item.id=d.id; data.push(item); });
+        data.sort((a,b)=>(a.created||'')>(b.created||'')?1:-1);
         localStorage.setItem(k, JSON.stringify(data));
-        // Refresh UI
-        if (k === 'tasks')     { renderTasks(); updateDashboard(); checkTodayTasks(); }
-        if (k === 'leads')     { renderLeads(); updateDashboard(); }
-        if (k === 'referrals') { renderReferrals(); updateDashboard(); }
-        if (k === 'sips')      { renderSIP(); updateDashboard(); }
-        if (k === 'insurance') { renderInsurance(); updateDashboard(); }
-      }, e => console.log('Listener error for', k, e));
+        refresh();
+      }, ()=>{});
   });
 }
 
