@@ -1004,7 +1004,20 @@ const DB = {
     batch.commit().catch(()=>{});
   }
 };
-
+async function loadFromFirestore() {
+  if(!currentUser) return;
+  const keys = ['tasks','leads','referrals','sips','insurance'];
+  for(const k of keys) {
+    try {
+      const snap = await db.collection('users')
+        .doc(currentUser.uid).collection(k).get();
+      const data = [];
+      snap.forEach(d => { const i=d.data(); if(!i.id) i.id=d.id; data.push(i); });
+      data.sort((a,b)=>(a.created||'')>(b.created||'')?1:-1);
+      localStorage.setItem(k, JSON.stringify(data));
+    } catch(e) {}
+  }
+}
 /* ============================================================
    REAL-TIME SYNC — listens for changes from other devices
    ============================================================ */
@@ -1438,7 +1451,7 @@ async function doSignOut() {
 /* ============================================================
    APP INIT
    ============================================================ */
-function initApp() {
+async function initApp() {
   setGreeting();
   document.getElementById('t-date').value = todayStr();
 
@@ -1456,7 +1469,7 @@ function initApp() {
 
   // Start real-time sync — data will auto-update from Firestore
    console.log('Sync starting for user:', currentUser.uid);
-  startRealtimeSync();
+  await loadFromFirestore(); await loadFromFirestore(); startRealtimeSync(); showToast('✅ Data synced!'); showToast('✅ Data synced!');
   showToast('✅ Syncing data…');
 
   // Ping last-seen every 5 min
